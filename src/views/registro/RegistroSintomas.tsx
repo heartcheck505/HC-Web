@@ -143,7 +143,7 @@ const inputClass =
 
 export default function RegistroSintomas() {
   const toastTimer = useRef<number | null>(null)
-  const patientName = getStoredPatientName() ?? '***REMOVED*** M.'
+  const patientName = getStoredPatientName() ?? 'Paciente'
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [toast, setToast] = useState<{

@@ -57,16 +57,16 @@ interface ActivityItem {
 }
 
 const FALLBACK_CONTACT: EmergencyContactInfo = {
-  name: '***REMOVED*** Martinez',
-  relationship: 'Hija · Familiar directo',
+  name: 'Cuidador',
+  relationship: 'Familiar directo',
   phone: '***REMOVED***',
 }
 
 const FALLBACK_PATIENT: PatientProfile = {
-  fullName: '***REMOVED*** M.',
+  fullName: 'Paciente',
   age: 68,
   address: '***REMOVED***',
-  tutor: '***REMOVED*** Martinez',
+  tutor: 'Cuidador',
   contact: FALLBACK_CONTACT,
 }
 

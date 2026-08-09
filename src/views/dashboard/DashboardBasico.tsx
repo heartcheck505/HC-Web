@@ -103,10 +103,10 @@ export default function DashboardBasico() {
   const [caregiverFirstName] = useState<string>(() =>
     getFirstName(`${currentUser?.firstName ?? ''} ${currentUser?.lastName ?? ''}`) ||
     getFirstName(currentUser?.firstName) ||
-    '***REMOVED***',
+    'Cuidador',
   )
   const [patientName, setPatientName] = useState<string>(
-    () => fallbackPatientName ?? '***REMOVED***',
+    () => fallbackPatientName ?? 'Paciente',
   )
 
   useEffect(() => {

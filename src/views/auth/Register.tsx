@@ -598,7 +598,7 @@ export default function Register() {
                   icon={User}
                   value={physician}
                   onChange={(event) => setPhysician(event.target.value)}
-                  placeholder="Ej. Dr. ***REMOVED*** Gómez (o Sin doctor asignado)"
+                  placeholder="Ej. Dr. ***REMOVED*** (o Sin doctor asignado)"
                 />
               </FormField>
             </div>
