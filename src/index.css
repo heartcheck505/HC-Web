@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+}
+
+::selection {
+  background-color: theme(--color-sky-200);
+}
