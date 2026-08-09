@@ -35,6 +35,8 @@ import {
   API_ENDPOINTS,
   apiClient,
   ApiError,
+  setStoredPatientName,
+  setStoredUser,
   tokenStorage,
 } from '../../api/apiClient'
 import type {
@@ -326,6 +328,16 @@ export default function Register() {
 
       if (response?.token) {
         tokenStorage.set(response.token)
+        setStoredUser({
+          id: 'local-user',
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          email: payload.email,
+          role: 'Nurse',
+        })
+        if (patientName.trim()) {
+          setStoredPatientName(patientName.trim())
+        }
         navigate('/dashboard', { replace: true })
       } else {
         navigate('/auth/login', { replace: true, state: { registered: true } })

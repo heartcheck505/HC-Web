@@ -14,6 +14,7 @@ import {
   API_ENDPOINTS,
   apiClient,
   ApiError,
+  setStoredUser,
   tokenStorage,
 } from '../../api/apiClient'
 import type { LoginRequest, LoginResponse } from '../../types/auth.types'
@@ -79,6 +80,7 @@ export default function Login() {
         { skipAuthRedirect: true },
       )
       tokenStorage.set(response.token)
+      setStoredUser(response.user)
       navigate(redirect, { replace: true })
     } catch (error) {
       if (error instanceof ApiError) {

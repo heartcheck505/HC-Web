@@ -9,7 +9,7 @@ import {
   Settings,
   Users,
 } from 'lucide-react'
-import { removeStoredToken } from '../../api/apiClient'
+import { clearSession, getStoredUser } from '../../api/apiClient'
 
 interface NavItem {
   label: string
@@ -27,8 +27,16 @@ export default function Sidebar() {
   const location = useLocation()
   const navigate = useNavigate()
 
+  const user = getStoredUser()
+  const displayName = user
+    ? `${user.firstName} ${user.lastName}`.trim()
+    : 'Usuario invitado'
+  const initials = user
+    ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase()
+    : 'UI'
+
   const handleLogout = (): void => {
-    removeStoredToken()
+    clearSession()
     navigate('/auth/login', { replace: true })
   }
 
@@ -67,11 +75,11 @@ export default function Sidebar() {
       <div className="mt-auto space-y-4">
         <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-            EM
+            {initials}
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-800">
-              ***REMOVED*** Martinez
+              {displayName}
             </p>
             <p className="text-xs text-slate-500">Plan Básico</p>
           </div>

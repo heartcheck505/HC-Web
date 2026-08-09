@@ -21,12 +21,14 @@
  * - Ante un 401 Unauthorized se limpia la sesión y se redirige a
  *   `/auth/login`.
  */
-import type { AuthErrorResponse } from '../types/auth.types'
+import type { AuthErrorResponse, UserDto } from '../types/auth.types'
 
 export const API_BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL || '/api'
 
 const TOKEN_STORAGE_KEY = 'heartcheck.token'
+const USER_STORAGE_KEY = 'heartcheck.user'
+const PATIENT_NAME_KEY = 'heartcheck.patientName'
 const LOGIN_PATH = '/auth/login'
 
 export interface ApiErrorPayload {
@@ -59,6 +61,54 @@ export function removeStoredToken(): void {
   window.localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
+export function getStoredUser(): UserDto | null {
+  try {
+    const raw = window.localStorage.getItem(USER_STORAGE_KEY)
+    if (!raw) {
+      return null
+    }
+    const parsed: unknown = JSON.parse(raw)
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as UserDto).firstName === 'string' &&
+      typeof (parsed as UserDto).lastName === 'string'
+    ) {
+      return parsed as UserDto
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function setStoredUser(user: UserDto): void {
+  window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+}
+
+export function removeStoredUser(): void {
+  window.localStorage.removeItem(USER_STORAGE_KEY)
+}
+
+export function getStoredPatientName(): string | null {
+  const name = window.localStorage.getItem(PATIENT_NAME_KEY)
+  return name && name.trim() !== '' ? name.trim() : null
+}
+
+export function setStoredPatientName(name: string): void {
+  window.localStorage.setItem(PATIENT_NAME_KEY, name.trim())
+}
+
+export function removeStoredPatientName(): void {
+  window.localStorage.removeItem(PATIENT_NAME_KEY)
+}
+
+export function clearSession(): void {
+  removeStoredToken()
+  removeStoredUser()
+  removeStoredPatientName()
+}
+
 export function isAuthenticated(): boolean {
   return Boolean(getStoredToken())
 }
@@ -74,7 +124,7 @@ export function shouldUseMockData(): boolean {
 }
 
 function handleUnauthorized(): void {
-  removeStoredToken()
+  clearSession()
   if (typeof window === 'undefined') {
     return
   }

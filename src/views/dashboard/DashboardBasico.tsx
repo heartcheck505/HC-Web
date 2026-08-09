@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -18,10 +18,26 @@ import {
   Watch,
   X,
 } from 'lucide-react'
+import {
+  API_ENDPOINTS,
+  apiClient,
+  getStoredPatientName,
+  getStoredUser,
+  isAuthenticated,
+  setStoredPatientName,
+} from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
+import type { Patient } from '../../types/patient.types'
 
 const heartRateBars = [38, 62, 45, 74, 56, 80, 52, 66, 48, 72, 58, 68, 44, 76]
+
+function getFirstName(name: string | null | undefined): string {
+  if (!name) {
+    return ''
+  }
+  return name.trim().split(' ')[0] ?? ''
+}
 
 interface LogRowProps {
   day: number
@@ -80,6 +96,43 @@ function PixelWatchVisual() {
 
 export default function DashboardBasico() {
   const toastTimer = useRef<number | null>(null)
+
+  const currentUser = getStoredUser()
+  const fallbackPatientName = getStoredPatientName()
+
+  const [caregiverFirstName] = useState<string>(() =>
+    getFirstName(`${currentUser?.firstName ?? ''} ${currentUser?.lastName ?? ''}`) ||
+    getFirstName(currentUser?.firstName) ||
+    '***REMOVED***',
+  )
+  const [patientName, setPatientName] = useState<string>(
+    () => fallbackPatientName ?? '***REMOVED***',
+  )
+
+  useEffect(() => {
+    if (!isAuthenticated() || fallbackPatientName) {
+      return
+    }
+    let cancelled = false
+    apiClient
+      .get<Patient>(API_ENDPOINTS.patients.me)
+      .then((profile) => {
+        if (cancelled) {
+          return
+        }
+        const fullName = `${profile.firstName} ${profile.lastName}`.trim()
+        if (fullName) {
+          setPatientName(fullName)
+          setStoredPatientName(fullName)
+        }
+      })
+      .catch(() => {
+        return
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [fallbackPatientName])
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [symptomOpen, setSymptomOpen] = useState(false)
@@ -158,8 +211,8 @@ export default function DashboardBasico() {
         <section className="mt-8 flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-blue-950">
-              Hola ***REMOVED***, monitoreando{' '}
-              <span className="text-blue-600">***REMOVED***</span>
+              Hola {caregiverFirstName}, monitoreando{' '}
+              <span className="text-blue-600">{patientName}</span>
             </h1>
             <p className="mt-2 flex items-center gap-2 text-sm text-slate-600">
               <span className="size-2.5 rounded-full bg-emerald-500" aria-hidden="true" />
@@ -441,7 +494,7 @@ export default function DashboardBasico() {
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               Se contactará de inmediato al número de emergencia configurado
-              para ***REMOVED***.
+              para {patientName}.
             </p>
             <div className="mt-6 flex gap-3">
               <button
@@ -484,7 +537,7 @@ export default function DashboardBasico() {
                   Nuevo Registro de Síntoma
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Describe la molestia para el seguimiento de ***REMOVED***.
+                  Describe la molestia para el seguimiento de {patientName}.
                 </p>
               </div>
               <button
