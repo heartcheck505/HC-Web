@@ -5,14 +5,13 @@
  * - El token JWT jamás se compromete en el código; se lee desde
  *   `localStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
- * - La URL base:
- *     * En desarrollo (`import.meta.env.DEV`) se usa la ruta relativa
- *       `/api`; el proxy de `vite.config.ts` la redirige al backend desde
- *       el propio Vite dev server, evitando bloqueos de CORS.
- *     * En producción se apunta directamente a
- *       `http://heartcheckapi.runasp.net/api`.
- *   `VITE_API_BASE_URL` sobreescribe el valor por defecto en cualquier
- *   entorno.
+ * - La URL base es siempre relativa: `import.meta.env.VITE_API_BASE_URL` si
+ *   está definida, o `/api` por defecto. En desarrollo el proxy de
+ *   `vite.config.ts` redirige `/api` al backend sin disparar CORS; en
+ *   producción (Render/HTTPS) las peticiones al mismo origen evitan errores
+ *   de Mixed Content al no mezclar `https://` con `http://`.
+ *   `VITE_API_BASE_URL` solo debe apuntar a una URL absoluta cuando el
+ *   servidor de la API sea HTTPS.
  * - Cortocircuito de datos de prueba: cuando `shouldUseMockData()` es
  *   verdadero (sin token o `VITE_USE_MOCK_DATA=true`), ninguna petición
  *   `GET` sale a la red: se lanza un `ApiError` simulado (status 0) que los
@@ -25,8 +24,7 @@
 import type { AuthErrorResponse } from '../types/auth.types'
 
 export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV ? '/api' : 'http://heartcheckapi.runasp.net/api')
+  import.meta.env.VITE_API_BASE_URL || '/api'
 
 const TOKEN_STORAGE_KEY = 'heartcheck.token'
 const LOGIN_PATH = '/auth/login'
