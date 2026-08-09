@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { API_ENDPOINTS, apiClient, shouldUseMockData } from '../../api/apiClient'
+import { API_ENDPOINTS, apiClient, getStoredPatientName, getStoredPhone, getStoredUser, setStoredPatientName, setStoredPhone, shouldUseMockData } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import type { Device } from '../../types/device.types'
@@ -189,7 +189,25 @@ export default function Pacientes() {
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [deviceModalOpen, setDeviceModalOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [patient, setPatient] = useState<PatientProfile>(FALLBACK_PATIENT)
+
+  const sessionUser = getStoredUser()
+  const sessionPatientName = getStoredPatientName()
+  const sessionPhone = getStoredPhone()
+  const sessionPersonName = sessionUser
+    ? `${sessionUser.firstName} ${sessionUser.lastName}`.trim()
+    : ''
+
+  const [patient, setPatient] = useState<PatientProfile>(() => ({
+    fullName: sessionPatientName || FALLBACK_PATIENT.fullName,
+    age: FALLBACK_PATIENT.age,
+    address: FALLBACK_PATIENT.address,
+    tutor: sessionPersonName || FALLBACK_PATIENT.tutor,
+    contact: {
+      name: sessionPersonName || FALLBACK_CONTACT.name,
+      relationship: FALLBACK_CONTACT.relationship,
+      phone: sessionPhone || FALLBACK_CONTACT.phone,
+    },
+  }))
 
   const showToast = (message: string): void => {
     if (toastTimer.current !== null) {
@@ -236,21 +254,26 @@ export default function Pacientes() {
         if (patientResult.status === 'fulfilled' && patientResult.value) {
           const apiPatient = patientResult.value
           const contact = apiPatient.emergencyContacts?.[0]
+          const apiFullName = `${apiPatient.firstName} ${apiPatient.lastName}`.trim()
+          if (apiFullName) {
+            setStoredPatientName(apiFullName)
+          }
+          if (contact?.phone) {
+            setStoredPhone(contact.phone)
+          }
           setPatient({
-            fullName:
-              `${apiPatient.firstName} ${apiPatient.lastName}`.trim() ||
-              FALLBACK_PATIENT.fullName,
+            fullName: apiFullName || FALLBACK_PATIENT.fullName,
             age: apiPatient.birthDate
               ? (getAge(apiPatient.birthDate) || FALLBACK_PATIENT.age)
               : FALLBACK_PATIENT.age,
             address:
               apiPatient.address?.trim() || FALLBACK_PATIENT.address,
-            tutor: apiPatient.tutor?.trim() || FALLBACK_PATIENT.tutor,
+            tutor: apiPatient.tutor?.trim() || sessionPersonName || FALLBACK_PATIENT.tutor,
             contact: {
-              name: contact?.name?.trim() || FALLBACK_CONTACT.name,
+              name: contact?.name?.trim() || sessionPersonName || FALLBACK_CONTACT.name,
               relationship:
                 contact?.relationship?.trim() || FALLBACK_CONTACT.relationship,
-              phone: contact?.phone?.trim() || FALLBACK_CONTACT.phone,
+              phone: contact?.phone?.trim() || sessionPhone || FALLBACK_CONTACT.phone,
             },
           })
         }

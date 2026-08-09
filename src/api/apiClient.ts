@@ -29,6 +29,7 @@ export const API_BASE_URL: string =
 const TOKEN_STORAGE_KEY = 'heartcheck.token'
 const USER_STORAGE_KEY = 'heartcheck.user'
 const PATIENT_NAME_KEY = 'heartcheck.patientName'
+const PHONE_STORAGE_KEY = 'heartcheck.phone'
 const LOGIN_PATH = '/auth/login'
 
 export interface ApiErrorPayload {
@@ -103,10 +104,24 @@ export function removeStoredPatientName(): void {
   window.localStorage.removeItem(PATIENT_NAME_KEY)
 }
 
+export function getStoredPhone(): string | null {
+  const phone = window.localStorage.getItem(PHONE_STORAGE_KEY)
+  return phone && phone.trim() !== '' ? phone.trim() : null
+}
+
+export function setStoredPhone(phone: string): void {
+  window.localStorage.setItem(PHONE_STORAGE_KEY, phone.trim())
+}
+
+export function removeStoredPhone(): void {
+  window.localStorage.removeItem(PHONE_STORAGE_KEY)
+}
+
 export function clearSession(): void {
   removeStoredToken()
   removeStoredUser()
   removeStoredPatientName()
+  removeStoredPhone()
 }
 
 export function isAuthenticated(): boolean {

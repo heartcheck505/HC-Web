@@ -36,6 +36,7 @@ import {
   apiClient,
   ApiError,
   setStoredPatientName,
+  setStoredPhone,
   setStoredUser,
   tokenStorage,
 } from '../../api/apiClient'
@@ -337,6 +338,9 @@ export default function Register() {
         })
         if (patientName.trim()) {
           setStoredPatientName(patientName.trim())
+        }
+        if (payload.phone.trim()) {
+          setStoredPhone(payload.phone.trim())
         }
         navigate('/dashboard', { replace: true })
       } else {

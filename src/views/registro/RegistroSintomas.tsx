@@ -16,7 +16,7 @@ import {
   User,
   X,
 } from 'lucide-react'
-import { API_ENDPOINTS, apiClient } from '../../api/apiClient'
+import { API_ENDPOINTS, apiClient, getStoredPatientName } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 
 const trendBars = [40, 65, 50, 75, 55, 80, 60, 70, 45, 68, 52, 74, 48, 72]
@@ -143,6 +143,7 @@ const inputClass =
 
 export default function RegistroSintomas() {
   const toastTimer = useRef<number | null>(null)
+  const patientName = getStoredPatientName() ?? '***REMOVED*** M.'
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [toast, setToast] = useState<{
@@ -313,7 +314,7 @@ export default function RegistroSintomas() {
             <User className="size-7 text-blue-600" aria-hidden="true" />
           </span>
           <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-4">
-            <PatientStat label="Paciente" value="***REMOVED*** M." />
+            <PatientStat label="Paciente" value={patientName} />
             <PatientStat
               label="Estado"
               value={
@@ -661,7 +662,7 @@ export default function RegistroSintomas() {
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               Se contactará de inmediato al número de emergencia configurado
-              para ***REMOVED***.
+              para {patientName}.
             </p>
             <div className="mt-6 flex gap-3">
               <button
