@@ -1,5 +1,7 @@
 export type UserRole = 'Admin' | 'Medic' | 'Nurse'
 
+export type UserPlan = 'basic' | 'premium'
+
 export interface LoginRequest {
   email: string
   password: string
@@ -64,6 +66,8 @@ export interface RegisterResponse {
   user?: UserDto
   /** Nombre completo tal como lo devuelven algunos backends. */
   nombre?: string
+  /** Licencia/plan seleccionado al registrarse. */
+  plan?: UserPlan
 }
 
 export interface UserDto {
@@ -73,6 +77,8 @@ export interface UserDto {
   secondLastName?: string
   email: string
   role: UserRole
+  /** Licencia/plan de suscripción. Ausente se interpreta como `basic`. */
+  plan?: UserPlan
 }
 
 export interface LoginResponse {

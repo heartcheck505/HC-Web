@@ -6,7 +6,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Activity,
   ArrowRight,
@@ -200,6 +200,10 @@ interface FormErrors {
 
 export default function Register() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const requestedPlan = searchParams.get('plan')
+  const sessionPlan =
+    requestedPlan === 'premium' || requestedPlan === 'gold' ? 'premium' : 'basic'
 
   const [caregiverName, setCaregiverName] = useState('')
   const [patientName, setPatientName] = useState('')
@@ -337,6 +341,7 @@ export default function Register() {
           lastName: payload.lastName,
           email: payload.email,
           role: 'Nurse' as const,
+          plan: sessionPlan,
         }
         setStoredUser(sessionUser)
         navigate('/dashboard', { replace: true })

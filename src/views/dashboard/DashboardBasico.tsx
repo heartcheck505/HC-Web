@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
   AlertTriangle,
   Battery,
@@ -93,6 +93,7 @@ function DeviceVisual({ heartRate }: { heartRate: number }) {
 
 export default function DashboardBasico() {
   const toastTimer = useRef<number | null>(null)
+  const location = useLocation()
 
   const currentUser = getStoredUser()
 
@@ -163,6 +164,10 @@ export default function DashboardBasico() {
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [symptomOpen, setSymptomOpen] = useState(false)
   const [deviceModalOpen, setDeviceModalOpen] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState<boolean>(() => {
+    const state = location.state as { upgradeRequired?: boolean } | null
+    return Boolean(state?.upgradeRequired)
+  })
   const [symptomName, setSymptomName] = useState('')
   const [symptomIntensity, setSymptomIntensity] = useState('Leve')
   const [symptomNotes, setSymptomNotes] = useState('')
@@ -610,6 +615,59 @@ export default function DashboardBasico() {
                 Guardar síntoma
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {upgradeOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upgrade-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4"
+          onClick={() => setUpgradeOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <span className="flex size-12 items-center justify-center rounded-full bg-amber-100">
+                <Star className="size-6 text-amber-600" aria-hidden="true" />
+              </span>
+              <button
+                type="button"
+                onClick={() => setUpgradeOpen(false)}
+                aria-label="Cerrar"
+                className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
+            <h2 id="upgrade-title" className="mt-4 text-lg font-bold text-slate-900">
+              Dashboard Premium requerido
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Tu plan actual no incluye el panel Premium. Actualiza tu plan para
+              acceder a predicciones con IA, métricas avanzadas y eventos
+              clínicos.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setUpgradeOpen(false)}
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                Ahora no
+              </button>
+              <Link
+                to="/planes"
+                onClick={() => setUpgradeOpen(false)}
+                className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              >
+                Ver planes
+              </Link>
+            </div>
           </div>
         </div>
       )}

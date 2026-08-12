@@ -21,7 +21,7 @@
  * - Ante un 401 Unauthorized se limpia la sesión y se redirige a
  *   `/auth/login`.
  */
-import type { AuthErrorResponse, UserDto } from '../types/auth.types'
+import type { AuthErrorResponse, UserDto, UserPlan } from '../types/auth.types'
 
 export const API_BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL || '/api'
@@ -90,6 +90,19 @@ export function setStoredUser(user: UserDto): void {
   window.sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
 }
 
+export function getUserPlan(): UserPlan {
+  const user = getStoredUser()
+  return user?.plan === 'premium' ? 'premium' : 'basic'
+}
+
+export function setUserPlan(plan: UserPlan): void {
+  const user = getStoredUser()
+  if (!user) {
+    return
+  }
+  setStoredUser({ ...user, plan })
+}
+
 export function removeStoredUser(): void {
   window.sessionStorage.removeItem(USER_STORAGE_KEY)
 }
@@ -127,6 +140,10 @@ export function normalizeStoredUser(payload: unknown): UserDto | null {
   const id = asString(nested?.id ?? raw.id)
   const email = asString(nested?.email ?? raw.email)
   const role = asString(nested?.role ?? raw.role)
+  // Por defecto se restringe: solo se concede `premium` si el backend lo
+  // declara explícitamente.
+  const plan: UserPlan =
+    (asString(nested?.plan ?? raw.plan) === 'premium' ? 'premium' : 'basic')
 
   let firstName = asString(nested?.firstName ?? raw.firstName)
   let lastName = asString(nested?.lastName ?? raw.lastName)
@@ -161,6 +178,7 @@ export function normalizeStoredUser(payload: unknown): UserDto | null {
       role === 'Admin' || role === 'Medic' || role === 'Nurse'
         ? role
         : 'Nurse',
+    plan,
   }
 }
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import DashboardLayout from '../components/layout/DashboardLayout'
-import { isAuthenticated } from '../api/apiClient'
+import { getUserPlan, isAuthenticated } from '../api/apiClient'
 import LandingPage from '../views/LandingPage'
 import Planes from '../views/Planes'
 import Soporte from '../views/Soporte'
@@ -15,6 +15,23 @@ import Register from '../views/auth/Register'
 function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!isAuthenticated()) {
     return <Navigate to="/auth/login" replace />
+  }
+  return children
+}
+
+function PremiumRoute({ children }: { children: ReactNode }) {
+  if (!isAuthenticated()) {
+    return <Navigate to="/auth/login" replace />
+  }
+  if (getUserPlan() !== 'premium') {
+    // Acceso restringido: el plan básico no incluye el panel Premium.
+    return (
+      <Navigate
+        to="/dashboard"
+        replace
+        state={{ upgradeRequired: true }}
+      />
+    )
   }
   return children
 }
@@ -39,9 +56,9 @@ const router = createBrowserRouter([
   {
     path: '/dashboard-premium',
     element: (
-      <ProtectedRoute>
+      <PremiumRoute>
         <DashboardPremium />
-      </ProtectedRoute>
+      </PremiumRoute>
     ),
   },
   {

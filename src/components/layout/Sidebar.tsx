@@ -1,16 +1,26 @@
+import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import {
+  ArrowUpRight,
   FileText,
+  FlaskConical,
   HeartPulse,
   HelpCircle,
   LayoutDashboard,
   LogOut,
   Settings,
   Sparkles,
+  Star,
   Users,
 } from 'lucide-react'
-import { clearSession, getStoredUser } from '../../api/apiClient'
+import {
+  clearSession,
+  getStoredUser,
+  getUserPlan,
+  setUserPlan,
+} from '../../api/apiClient'
+import type { UserPlan } from '../../types/auth.types'
 
 interface NavItem {
   label: string
@@ -20,20 +30,24 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-  {
-    label: 'Dashboard Premium',
-    to: '/dashboard-premium',
-    icon: Sparkles,
-  },
   { label: 'Registro', to: '/registro', icon: FileText },
   { label: 'Pacientes', to: '/pacientes', icon: Users },
 ]
+
+const premiumNavItem: NavItem = {
+  label: 'Dashboard Premium',
+  to: '/dashboard-premium',
+  icon: Sparkles,
+}
 
 export default function Sidebar() {
   const location = useLocation()
   const navigate = useNavigate()
 
   const user = getStoredUser()
+  const [plan, setPlan] = useState<UserPlan>(() => getUserPlan())
+  const isPremium = plan === 'premium'
+
   const displayName = user
     ? `${user.firstName} ${user.lastName}`.trim()
     : 'Usuario invitado'
@@ -45,6 +59,18 @@ export default function Sidebar() {
     clearSession()
     navigate('/auth/login', { replace: true })
   }
+
+  const handlePlanChange = (nextPlan: UserPlan): void => {
+    setUserPlan(nextPlan)
+    setPlan(nextPlan)
+    if (nextPlan === 'basic' && location.pathname === '/dashboard-premium') {
+      navigate('/dashboard', { replace: true, state: { upgradeRequired: true } })
+    }
+  }
+
+  const visibleNavItems = isPremium
+    ? [...navItems, premiumNavItem]
+    : navItems
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 lg:flex">
@@ -58,7 +84,7 @@ export default function Sidebar() {
       </Link>
 
       <nav className="mt-10 space-y-1.5" aria-label="Menú principal">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const active = location.pathname === item.to
           return (
             <Link
@@ -76,9 +102,56 @@ export default function Sidebar() {
             </Link>
           )
         })}
+
+        {!isPremium && (
+          <Link
+            to="/planes"
+            className="mt-3 flex items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+          >
+            <Star className="size-4 shrink-0 text-amber-500" aria-hidden="true" />
+            Actualizar a Premium
+            <ArrowUpRight
+              className="ml-auto size-4 shrink-0 text-amber-500"
+              aria-hidden="true"
+            />
+          </Link>
+        )}
       </nav>
 
       <div className="mt-auto space-y-4">
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3">
+          <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            <FlaskConical className="size-3.5" aria-hidden="true" />
+            Simulador de plan
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => handlePlanChange('basic')}
+              aria-pressed={!isPremium}
+              className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
+                !isPremium
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-white text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Básico
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePlanChange('premium')}
+              aria-pressed={isPremium}
+              className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
+                isPremium
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-slate-500 hover:text-blue-700'
+              }`}
+            >
+              Premium
+            </button>
+          </div>
+        </div>
+
         <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
             {initials}
@@ -87,7 +160,9 @@ export default function Sidebar() {
             <p className="truncate text-sm font-semibold text-slate-800">
               {displayName}
             </p>
-            <p className="text-xs text-slate-500">Plan Básico</p>
+            <p className="text-xs text-slate-500">
+              {isPremium ? 'Plan Premium' : 'Plan Básico'}
+            </p>
           </div>
         </div>
 

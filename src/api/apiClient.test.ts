@@ -3,10 +3,12 @@ import {
   clearSession,
   getStoredToken,
   getStoredUser,
+  getUserPlan,
   isAuthenticated,
   normalizeStoredUser,
   setStoredToken,
   setStoredUser,
+  setUserPlan,
   shouldUseMockData,
 } from './apiClient'
 
@@ -150,5 +152,51 @@ describe('normalizeStoredUser', () => {
     expect(normalizeStoredUser(null)).toBeNull()
     expect(normalizeStoredUser('texto')).toBeNull()
     expect(normalizeStoredUser({ token: 'jwt-test' })).toBeNull()
+  })
+
+  it('concede premium solo si el backend lo declara', () => {
+    const premium = normalizeStoredUser({
+      user: { id: 'u3', nombre: 'Ana', email: 'a@example.com', plan: 'premium' },
+    })
+    expect(premium?.plan).toBe('premium')
+    const basic = normalizeStoredUser({
+      user: { id: 'u4', nombre: 'Luis', email: 'l@example.com' },
+    })
+    expect(basic?.plan).toBe('basic')
+    const rawPlan = normalizeStoredUser({
+      token: 'jwt-test',
+      nombre: 'Ana',
+      email: 'a@example.com',
+      plan: 'gold',
+    })
+    expect(rawPlan?.plan).toBe('basic')
+  })
+})
+
+describe('plan de usuario', () => {
+  it('devuelve básico por defecto', () => {
+    expect(getUserPlan()).toBe('basic')
+  })
+
+  it('persiste el cambio de plan en la sesión', () => {
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    expect(getUserPlan()).toBe('basic')
+    setUserPlan('premium')
+    expect(getUserPlan()).toBe('premium')
+    expect(getStoredUser()?.plan).toBe('premium')
+    setUserPlan('basic')
+    expect(getUserPlan()).toBe('basic')
+  })
+
+  it('no crea usuario si no hay sesión activa', () => {
+    setUserPlan('premium')
+    expect(getUserPlan()).toBe('basic')
+    expect(getStoredUser()).toBeNull()
   })
 })
