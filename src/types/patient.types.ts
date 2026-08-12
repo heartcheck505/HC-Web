@@ -10,6 +10,7 @@ export interface Patient {
   id: string
   firstName: string
   lastName: string
+  secondLastName?: string | null
   birthDate: string
   gender: Gender
   phone: string | null
@@ -25,6 +26,7 @@ export interface Patient {
 export interface CreatePatientRequest {
   firstName: string
   lastName: string
+  secondLastName?: string
   birthDate: string
   gender: Gender
   phone?: string
@@ -35,6 +37,7 @@ export interface CreatePatientRequest {
 export interface UpdatePatientRequest {
   firstName?: string
   lastName?: string
+  secondLastName?: string
   birthDate?: string
   gender?: Gender
   phone?: string

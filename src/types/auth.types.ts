@@ -10,6 +10,7 @@ export interface RegisterRequest {
   password: string
   firstName: string
   lastName: string
+  secondLastName?: string
   phone: string
 }
 
@@ -66,6 +67,7 @@ export interface UserDto {
   id: string
   firstName: string
   lastName: string
+  secondLastName?: string
   email: string
   role: UserRole
 }

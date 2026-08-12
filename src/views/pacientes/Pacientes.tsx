@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { API_ENDPOINTS, apiClient, getStoredPatientName, getStoredPhone, getStoredUser, setStoredPatientName, setStoredPhone, shouldUseMockData } from '../../api/apiClient'
+import { API_ENDPOINTS, apiClient, getStoredUser, shouldUseMockData } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import type { Device } from '../../types/device.types'
@@ -57,64 +57,23 @@ interface ActivityItem {
 }
 
 const FALLBACK_CONTACT: EmergencyContactInfo = {
-  name: 'Cuidador',
-  relationship: 'Familiar directo',
-  phone: '+56 9 0000 0000',
+  name: 'Sin contacto registrado',
+  relationship: 'Sin información',
+  phone: '',
 }
 
 const FALLBACK_PATIENT: PatientProfile = {
   fullName: 'Paciente',
-  age: 68,
+  age: 0,
   address: 'Dirección no registrada',
   tutor: 'Cuidador',
   contact: FALLBACK_CONTACT,
 }
 
-const FALLBACK_DEVICE: DeviceInfo = {
-  model: 'Smartwatch G3',
-  batteryLevel: 42,
+const EMPTY_DEVICE: DeviceInfo = {
+  model: 'Sin dispositivo conectado',
+  batteryLevel: 0,
   lastSyncAt: null,
-}
-
-function buildFallbackMeasurements(now: Date): Measurement[] {
-  return [
-    {
-      id: 'fb-m1',
-      patientId: 'fallback',
-      deviceId: 'fallback',
-      heartRate: 74,
-      systolic: 122,
-      diastolic: 80,
-      spo2: 96,
-      respiratoryRate: 15,
-      temperature: 36.5,
-      recordedAt: new Date(now.getTime() - 45 * 60 * 1000).toISOString(),
-    },
-    {
-      id: 'fb-m2',
-      patientId: 'fallback',
-      deviceId: 'fallback',
-      heartRate: 79,
-      systolic: 124,
-      diastolic: 81,
-      spo2: 95,
-      respiratoryRate: 16,
-      temperature: 36.4,
-      recordedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: 'fb-m3',
-      patientId: 'fallback',
-      deviceId: 'fallback',
-      heartRate: 71,
-      systolic: 121,
-      diastolic: 78,
-      spo2: 97,
-      respiratoryRate: 15,
-      temperature: 36.6,
-      recordedAt: new Date(now.getTime() - 26 * 60 * 60 * 1000).toISOString(),
-    },
-  ]
 }
 
 function toArray<T>(payload: T[] | PagedResult<T> | null | undefined): T[] {
@@ -157,6 +116,11 @@ function formatReportTime(iso: string | null): string {
   })
 }
 
+function normalizePhoneForTel(phone: string): string | null {
+  const compact = phone.trim().replace(/[\s().-]/g, '')
+  return /^\+\d{7,15}$/.test(compact) ? compact : null
+}
+
 function buildActivityList(
   measurements: Measurement[],
   device: DeviceInfo,
@@ -164,15 +128,21 @@ function buildActivityList(
   const sorted = [...measurements].sort(
     (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
   )
-  return [
+  const activity: ActivityItem[] = [
     {
       id: 'activity-sync',
       icon: Watch,
       tone: 'bg-sky-100 text-sky-600',
       title: 'Sincronización del Smartwatch',
       detail: `${device.model} · Batería ${device.batteryLevel}%`,
-      time: device.lastSyncAt ? formatReportTime(device.lastSyncAt) : 'Hace 5 min',
+      time: formatReportTime(device.lastSyncAt),
     },
+  ]
+  if (!device.lastSyncAt) {
+    return []
+  }
+  return [
+    ...activity,
     ...sorted.slice(0, 6).map((measurement) => ({
       id: measurement.id,
       icon: HeartPulse,
@@ -191,21 +161,19 @@ export default function Pacientes() {
   const [toast, setToast] = useState<string | null>(null)
 
   const sessionUser = getStoredUser()
-  const sessionPatientName = getStoredPatientName()
-  const sessionPhone = getStoredPhone()
   const sessionPersonName = sessionUser
     ? `${sessionUser.firstName} ${sessionUser.lastName}`.trim()
     : ''
 
   const [patient, setPatient] = useState<PatientProfile>(() => ({
-    fullName: sessionPatientName || FALLBACK_PATIENT.fullName,
+    fullName: FALLBACK_PATIENT.fullName,
     age: FALLBACK_PATIENT.age,
     address: FALLBACK_PATIENT.address,
     tutor: sessionPersonName || FALLBACK_PATIENT.tutor,
     contact: {
       name: sessionPersonName || FALLBACK_CONTACT.name,
       relationship: FALLBACK_CONTACT.relationship,
-      phone: sessionPhone || FALLBACK_CONTACT.phone,
+      phone: FALLBACK_CONTACT.phone,
     },
   }))
 
@@ -219,10 +187,8 @@ export default function Pacientes() {
       toastTimer.current = null
     }, 3500)
   }
-  const [device, setDevice] = useState<DeviceInfo>(FALLBACK_DEVICE)
-  const [measurements, setMeasurements] = useState<Measurement[]>(() =>
-    buildFallbackMeasurements(new Date()),
-  )
+  const [device, setDevice] = useState<DeviceInfo>(EMPTY_DEVICE)
+  const [measurements, setMeasurements] = useState<Measurement[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -230,8 +196,8 @@ export default function Pacientes() {
     const loadData = async (): Promise<void> => {
       if (shouldUseMockData()) {
         setPatient(FALLBACK_PATIENT)
-        setDevice(FALLBACK_DEVICE)
-        setMeasurements(buildFallbackMeasurements(new Date()))
+        setDevice(EMPTY_DEVICE)
+        setMeasurements([])
         return
       }
 
@@ -255,16 +221,10 @@ export default function Pacientes() {
           const apiPatient = patientResult.value
           const contact = apiPatient.emergencyContacts?.[0]
           const apiFullName = `${apiPatient.firstName} ${apiPatient.lastName}`.trim()
-          if (apiFullName) {
-            setStoredPatientName(apiFullName)
-          }
-          if (contact?.phone) {
-            setStoredPhone(contact.phone)
-          }
           setPatient({
             fullName: apiFullName || FALLBACK_PATIENT.fullName,
             age: apiPatient.birthDate
-              ? (getAge(apiPatient.birthDate) || FALLBACK_PATIENT.age)
+              ? getAge(apiPatient.birthDate)
               : FALLBACK_PATIENT.age,
             address:
               apiPatient.address?.trim() || FALLBACK_PATIENT.address,
@@ -273,7 +233,7 @@ export default function Pacientes() {
               name: contact?.name?.trim() || sessionPersonName || FALLBACK_CONTACT.name,
               relationship:
                 contact?.relationship?.trim() || FALLBACK_CONTACT.relationship,
-              phone: contact?.phone?.trim() || sessionPhone || FALLBACK_CONTACT.phone,
+              phone: contact?.phone?.trim() || FALLBACK_CONTACT.phone,
             },
           })
         }
@@ -282,9 +242,9 @@ export default function Pacientes() {
           const firstDevice = toArray(deviceResult.value)[0]
           if (firstDevice) {
             setDevice({
-              model: firstDevice.model || FALLBACK_DEVICE.model,
+              model: firstDevice.model || EMPTY_DEVICE.model,
               batteryLevel:
-                firstDevice.batteryLevel ?? FALLBACK_DEVICE.batteryLevel,
+                firstDevice.batteryLevel ?? EMPTY_DEVICE.batteryLevel,
               lastSyncAt: firstDevice.lastSyncAt,
             })
           }
@@ -301,8 +261,8 @@ export default function Pacientes() {
           return
         }
         setPatient(FALLBACK_PATIENT)
-        setDevice(FALLBACK_DEVICE)
-        setMeasurements(buildFallbackMeasurements(new Date()))
+        setDevice(EMPTY_DEVICE)
+        setMeasurements([])
       }
     }
 
@@ -310,18 +270,19 @@ export default function Pacientes() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [sessionPersonName])
 
   const sortedMeasurements = [...measurements].sort(
     (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
   )
   const latest = sortedMeasurements[0] ?? null
-  const latestBpm = latest?.heartRate ?? 72
-  const spo2 = latest?.spo2 ?? 96
-  const latestSys = latest?.systolic ?? 122
-  const latestDia = latest?.diastolic ?? 80
+  const latestBpm = latest?.heartRate ?? 0
+  const spo2 = latest?.spo2 ?? 0
+  const latestSys = latest?.systolic ?? 0
+  const latestDia = latest?.diastolic ?? 0
 
   const activity = buildActivityList(measurements, device)
+  const emergencyPhone = normalizePhoneForTel(patient.contact.phone)
 
   const batteryColor =
     device.batteryLevel >= 50
@@ -488,9 +449,7 @@ export default function Pacientes() {
             </div>
             <p className="mt-4 text-xs text-slate-500">
               Última sincronización:{' '}
-              {device.lastSyncAt
-                ? formatReportTime(device.lastSyncAt)
-                : 'hace 5 minutos'}
+              {formatReportTime(device.lastSyncAt)}
             </p>
             <button
               type="button"
@@ -574,13 +533,19 @@ export default function Pacientes() {
             <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700">
               {patient.contact.phone}
             </p>
-            <a
-              href={`tel:${patient.contact.phone.replace(/\s/g, '')}`}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-            >
-              <Phone className="size-4" aria-hidden="true" />
-              Llamar ahora
-            </a>
+            {emergencyPhone ? (
+              <a
+                href={`tel:${emergencyPhone}`}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              >
+                <Phone className="size-4" aria-hidden="true" />
+                Llamar ahora
+              </a>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">
+                No hay un teléfono de emergencia válido.
+              </p>
+            )}
           </div>
         </section>
 
@@ -594,6 +559,11 @@ export default function Pacientes() {
               En tiempo real
             </span>
           </div>
+          {activity.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">
+              Sin actividad de dispositivo o mediciones todavía.
+            </p>
+          ) : (
           <ul className="mt-4 divide-y divide-slate-100">
             {activity.map((item) => (
               <li key={item.id} className="flex items-center gap-4 py-3">
@@ -616,6 +586,7 @@ export default function Pacientes() {
               </li>
             ))}
           </ul>
+          )}
         </section>
 
         <section className="mt-6 flex flex-col items-start justify-between gap-4 rounded-2xl bg-gradient-to-br from-indigo-700 to-violet-700 p-6 text-white shadow-lg sm:flex-row sm:items-center">

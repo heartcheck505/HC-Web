@@ -45,16 +45,8 @@ export default function Dashboard() {
 
     if (shouldUseMockData()) {
       setState({
-        summary: {
-          latestHeartRate: 74,
-          averageHeartRate: 72,
-          minHeartRate: 61,
-          maxHeartRate: 82,
-          latestSpo2: 96,
-          measurementCount: 12,
-          lastRecordedAt: new Date().toISOString(),
-        },
-        patientTotal: 1,
+        summary: null,
+        patientTotal: 0,
         alerts: [],
       })
       setLoading(false)

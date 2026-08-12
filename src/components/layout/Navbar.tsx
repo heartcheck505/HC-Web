@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { isAuthenticated, removeStoredToken } from '../../api/apiClient'
+import { clearSession, isAuthenticated } from '../../api/apiClient'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
   `rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -13,7 +13,7 @@ export default function Navbar() {
   const authenticated = isAuthenticated()
 
   const handleLogout = (): void => {
-    removeStoredToken()
+    clearSession()
     navigate('/auth/login', { replace: true })
   }
 

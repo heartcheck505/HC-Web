@@ -3,7 +3,7 @@
  *
  * DevSecOps:
  * - El token JWT jamás se compromete en el código; se lee desde
- *   `localStorage` y se adjunta automáticamente al header
+ *   `sessionStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
  * - La URL base es siempre relativa: `import.meta.env.VITE_API_BASE_URL` si
  *   está definida, o `/api` por defecto. En desarrollo el proxy de
@@ -28,8 +28,11 @@ export const API_BASE_URL: string =
 
 const TOKEN_STORAGE_KEY = 'heartcheck.token'
 const USER_STORAGE_KEY = 'heartcheck.user'
-const PATIENT_NAME_KEY = 'heartcheck.patientName'
-const PHONE_STORAGE_KEY = 'heartcheck.phone'
+const LEGACY_PII_STORAGE_KEYS = [
+  'heartcheck.patientName',
+  'heartcheck.phone',
+  'local_symptoms_history',
+]
 const LOGIN_PATH = '/auth/login'
 
 export interface ApiErrorPayload {
@@ -51,20 +54,20 @@ export class ApiError extends Error {
 }
 
 export function getStoredToken(): string | null {
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY)
+  return window.sessionStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
 export function setStoredToken(token: string): void {
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token)
 }
 
 export function removeStoredToken(): void {
-  window.localStorage.removeItem(TOKEN_STORAGE_KEY)
+  window.sessionStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
 export function getStoredUser(): UserDto | null {
   try {
-    const raw = window.localStorage.getItem(USER_STORAGE_KEY)
+    const raw = window.sessionStorage.getItem(USER_STORAGE_KEY)
     if (!raw) {
       return null
     }
@@ -84,44 +87,20 @@ export function getStoredUser(): UserDto | null {
 }
 
 export function setStoredUser(user: UserDto): void {
-  window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+  window.sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
 }
 
 export function removeStoredUser(): void {
-  window.localStorage.removeItem(USER_STORAGE_KEY)
-}
-
-export function getStoredPatientName(): string | null {
-  const name = window.localStorage.getItem(PATIENT_NAME_KEY)
-  return name && name.trim() !== '' ? name.trim() : null
-}
-
-export function setStoredPatientName(name: string): void {
-  window.localStorage.setItem(PATIENT_NAME_KEY, name.trim())
-}
-
-export function removeStoredPatientName(): void {
-  window.localStorage.removeItem(PATIENT_NAME_KEY)
-}
-
-export function getStoredPhone(): string | null {
-  const phone = window.localStorage.getItem(PHONE_STORAGE_KEY)
-  return phone && phone.trim() !== '' ? phone.trim() : null
-}
-
-export function setStoredPhone(phone: string): void {
-  window.localStorage.setItem(PHONE_STORAGE_KEY, phone.trim())
-}
-
-export function removeStoredPhone(): void {
-  window.localStorage.removeItem(PHONE_STORAGE_KEY)
+  window.sessionStorage.removeItem(USER_STORAGE_KEY)
 }
 
 export function clearSession(): void {
   removeStoredToken()
   removeStoredUser()
-  removeStoredPatientName()
-  removeStoredPhone()
+  // Remove data written by earlier client versions during the migration.
+  for (const key of LEGACY_PII_STORAGE_KEYS) {
+    window.localStorage?.removeItem(key)
+  }
 }
 
 export function isAuthenticated(): boolean {

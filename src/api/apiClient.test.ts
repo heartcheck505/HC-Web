@@ -1,13 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearSession,
-  getStoredPatientName,
-  getStoredPhone,
   getStoredToken,
   getStoredUser,
   isAuthenticated,
-  setStoredPatientName,
-  setStoredPhone,
   setStoredToken,
   setStoredUser,
   shouldUseMockData,
@@ -16,7 +12,7 @@ import {
 const storage = new Map<string, string>()
 
 const fakeWindow = {
-  localStorage: {
+  sessionStorage: {
     getItem: (key: string): string | null => storage.get(key) ?? null,
     setItem: (key: string, value: string): void => {
       storage.set(key, value)
@@ -47,12 +43,16 @@ describe('tokenStorage', () => {
 
   it('limpia la sesión completa', () => {
     setStoredToken('jwt-test')
-    setStoredPatientName('Paciente Test')
-    setStoredPhone('+56 9 0000 0000')
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
     clearSession()
     expect(getStoredToken()).toBeNull()
-    expect(getStoredPatientName()).toBeNull()
-    expect(getStoredPhone()).toBeNull()
+    expect(getStoredUser()).toBeNull()
     expect(isAuthenticated()).toBe(false)
   })
 })
@@ -75,18 +75,6 @@ describe('user storage', () => {
   it('descarta datos de usuario corruptos', () => {
     storage.set('heartcheck.user', '{no-json')
     expect(getStoredUser()).toBeNull()
-  })
-})
-
-describe('stored patient name', () => {
-  it('normaliza espacios en blanco', () => {
-    setStoredPatientName('  Paciente  Test  ')
-    expect(getStoredPatientName()).toBe('Paciente  Test')
-  })
-
-  it('devuelve null para valores vacíos', () => {
-    setStoredPatientName('   ')
-    expect(getStoredPatientName()).toBeNull()
   })
 })
 

@@ -21,16 +21,14 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
-  getStoredPatientName,
   getStoredUser,
   isAuthenticated,
-  setStoredPatientName,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
-import type { Patient } from '../../types/patient.types'
-
-const heartRateBars = [38, 62, 45, 74, 56, 80, 52, 66, 48, 72, 58, 68, 44, 76]
+import type { Device } from '../../types/device.types'
+import type { Measurement } from '../../types/measurement.types'
+import type { Patient, PagedResult } from '../../types/patient.types'
 
 function getFirstName(name: string | null | undefined): string {
   if (!name) {
@@ -72,16 +70,15 @@ function LogRow({ day, text, emoji, tone }: LogRowProps) {
   )
 }
 
-function PixelWatchVisual() {
+function DeviceVisual({ heartRate }: { heartRate: number }) {
   return (
     <div className="flex flex-col items-center">
       <div className="h-12 w-14 rounded-t-xl bg-slate-600/80" aria-hidden="true" />
       <div className="relative flex size-40 items-center justify-center rounded-[2.5rem] bg-gradient-to-br from-slate-700 to-slate-900 ring-4 ring-slate-600">
         <div className="flex size-32 flex-col items-center justify-center rounded-[2rem] bg-black shadow-[0_0_60px_-12px_rgba(37,99,235,0.8)]">
-          <span className="text-xs font-semibold text-sky-300">09:41</span>
-          <HeartPulse className="mt-1 size-10 animate-pulse text-emerald-400" />
-          <span className="mt-1 text-[10px] font-semibold text-emerald-400">
-            74 BPM
+            <HeartPulse className="mt-1 size-10 text-slate-500" />
+            <span className="mt-1 text-[10px] font-semibold text-slate-400">
+              {heartRate} BPM
           </span>
         </div>
         <span
@@ -98,19 +95,18 @@ export default function DashboardBasico() {
   const toastTimer = useRef<number | null>(null)
 
   const currentUser = getStoredUser()
-  const fallbackPatientName = getStoredPatientName()
 
   const [caregiverFirstName] = useState<string>(() =>
     getFirstName(`${currentUser?.firstName ?? ''} ${currentUser?.lastName ?? ''}`) ||
     getFirstName(currentUser?.firstName) ||
     'Cuidador',
   )
-  const [patientName, setPatientName] = useState<string>(
-    () => fallbackPatientName ?? 'Paciente',
-  )
+  const [patientName, setPatientName] = useState<string>('Paciente')
+  const [device, setDevice] = useState<Device | null>(null)
+  const [latestMeasurement, setLatestMeasurement] = useState<Measurement | null>(null)
 
   useEffect(() => {
-    if (!isAuthenticated() || fallbackPatientName) {
+    if (!isAuthenticated()) {
       return
     }
     let cancelled = false
@@ -123,7 +119,6 @@ export default function DashboardBasico() {
         const fullName = `${profile.firstName} ${profile.lastName}`.trim()
         if (fullName) {
           setPatientName(fullName)
-          setStoredPatientName(fullName)
         }
       })
       .catch(() => {
@@ -132,7 +127,38 @@ export default function DashboardBasico() {
     return () => {
       cancelled = true
     }
-  }, [fallbackPatientName])
+  }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      return
+    }
+    let cancelled = false
+    const toArray = <T,>(payload: T[] | PagedResult<T>): T[] =>
+      Array.isArray(payload) ? payload : payload.items
+
+    Promise.allSettled([
+      apiClient.get<Device[] | PagedResult<Device>>(
+        `${API_ENDPOINTS.devices.list}?page=1&pageSize=1`,
+      ),
+      apiClient.get<Measurement[] | PagedResult<Measurement>>(
+        `${API_ENDPOINTS.measurements.list}?page=1&pageSize=1`,
+      ),
+    ]).then(([deviceResult, measurementResult]) => {
+      if (cancelled) {
+        return
+      }
+      if (deviceResult.status === 'fulfilled') {
+        setDevice(toArray(deviceResult.value)[0] ?? null)
+      }
+      if (measurementResult.status === 'fulfilled') {
+        setLatestMeasurement(toArray(measurementResult.value)[0] ?? null)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [symptomOpen, setSymptomOpen] = useState(false)
@@ -217,7 +243,7 @@ export default function DashboardBasico() {
             <p className="mt-2 flex items-center gap-2 text-sm text-slate-600">
               <span className="size-2.5 rounded-full bg-emerald-500" aria-hidden="true" />
               Estatus Estable
-              <span className="text-slate-400">• Actualizado hace 2 min</span>
+              <span className="text-slate-400">• Sin telemetría disponible</span>
             </p>
           </div>
 
@@ -246,20 +272,15 @@ export default function DashboardBasico() {
               </span>
             </div>
             <div className="mt-4 flex items-baseline gap-1.5">
-              <span className="text-5xl font-extrabold text-slate-900">74</span>
+              <span className="text-5xl font-extrabold text-slate-900">
+                {latestMeasurement?.heartRate ?? 0}
+              </span>
               <span className="text-lg font-semibold text-slate-500">BPM</span>
             </div>
-            <div className="mt-4 flex h-12 items-end gap-1.5" aria-hidden="true">
-              {heartRateBars.map((height, index) => (
-                <span
-                  key={index}
-                  className="w-2 rounded-full bg-rose-300"
-                  style={{ height: `${height}%` }}
-                />
-              ))}
-            </div>
-            <p className="mt-4 text-sm font-medium text-emerald-600">
-              ~ Normal range (60-100)
+            <p className="mt-4 text-sm text-slate-500">
+              {latestMeasurement
+                ? 'Última lectura recibida del dispositivo.'
+                : 'Conecta un dispositivo para recibir mediciones.'}
             </p>
           </div>
 
@@ -272,24 +293,28 @@ export default function DashboardBasico() {
                 <Watch className="size-5 text-sky-600" aria-hidden="true" />
               </span>
             </div>
-            <p className="mt-4 text-xl font-bold text-slate-900">Pixel Watch</p>
+            <p className="mt-4 text-xl font-bold text-slate-900">
+              {device?.model ?? 'Sin dispositivo conectado'}
+            </p>
             <div className="mt-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">Señal</span>
-                <span className="font-semibold text-emerald-600">Excelente</span>
+                <span className="font-semibold text-slate-500">
+                  {device?.lastSyncAt ? 'Conectado' : 'Sin señal'}
+                </span>
               </div>
               <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
                 <div
-                  className="h-full rounded-full bg-emerald-500"
-                  style={{ width: '92%' }}
+                  className="h-full rounded-full bg-slate-300"
+                  style={{ width: device?.lastSyncAt ? '100%' : '0%' }}
                 />
               </div>
             </div>
             <div className="mt-4 flex items-center justify-between">
               <span className="text-sm text-slate-500">Batería</span>
-              <span className="flex items-center gap-1.5 text-sm font-semibold text-amber-500">
+              <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-500">
                 <Battery className="size-4" aria-hidden="true" />
-                <span className="text-amber-600">42%</span>
+                <span>{device?.batteryLevel ?? 0}%</span>
               </span>
             </div>
           </div>
@@ -298,30 +323,7 @@ export default function DashboardBasico() {
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Alertas
             </p>
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center gap-3 rounded-xl bg-amber-50 p-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
-                  <AlertTriangle className="size-5 text-amber-600" aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    Medición omitida
-                  </p>
-                  <p className="text-xs text-slate-500">Prevista a las 8:00 AM</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-xl bg-emerald-50 p-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-                  <CheckCircle2 className="size-5 text-emerald-600" aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    Paseo matutino
-                  </p>
-                  <p className="text-xs text-slate-500">30 min de actividad</p>
-                </div>
-              </div>
-            </div>
+            <p className="mt-4 text-sm text-slate-500">No hay alertas activas.</p>
           </div>
         </section>
 
@@ -368,13 +370,13 @@ export default function DashboardBasico() {
                   day={24}
                   tone="gray"
                   emoji="😊"
-                  text="24 de octubre - Día estable (Frecuencia cardíaca promedio: 72 lpm...)"
+                  text="Sin datos clínicos recientes."
                 />
                 <LogRow
                   day={23}
                   tone="amber"
                   emoji="😐"
-                  text="23 de octubre - Ligera fatiga (FR: 78 lpm)..."
+                  text="Conecta un dispositivo para iniciar el seguimiento."
                 />
               </div>
 
@@ -383,13 +385,13 @@ export default function DashboardBasico() {
                   <LogRow
                     day={22}
                     tone="gray"
-                    text="22 de octubre - Día estable (Frecuencia cardíaca promedio: 71 lpm...)"
+                    text="Sin datos disponibles"
                     emoji="😊"
                   />
                   <LogRow
                     day={21}
                     tone="gray"
-                    text="21 de octubre - Día estable (Frecuencia cardíaca promedio: 70 lpm...)"
+                    text="Sin datos disponibles"
                     emoji="😊"
                   />
                 </div>
@@ -420,27 +422,27 @@ export default function DashboardBasico() {
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Dispositivo del Paciente ·{' '}
                 <span className="normal-case tracking-normal text-slate-900">
-                  Pixel Watch
+                  {device?.model ?? 'Sin dispositivo'}
                 </span>
               </h3>
-              <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                Conectado
+              <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                <span className="size-1.5 rounded-full bg-slate-400" aria-hidden="true" />
+                {device?.lastSyncAt ? 'Conectado' : 'Desconectado'}
               </span>
             </div>
 
             <div className="mt-6 flex items-center justify-center rounded-2xl bg-slate-950 py-10">
-              <PixelWatchVisual />
+              <DeviceVisual heartRate={latestMeasurement?.heartRate ?? 0} />
             </div>
 
             <ul className="mt-6 space-y-3 text-sm">
               <li className="flex items-center gap-2.5 text-slate-700">
-                <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-hidden="true" />
-                Conexión establecida
+                <CheckCircle2 className="size-5 shrink-0 text-slate-400" aria-hidden="true" />
+                {device?.lastSyncAt ? 'Conexión establecida' : 'Esperando conexión'}
               </li>
               <li className="flex items-center gap-2.5 text-slate-600">
                 <Clock className="size-5 shrink-0 text-slate-400" aria-hidden="true" />
-                Última sincronización: hace 30 s
+                Última sincronización: {device?.lastSyncAt ?? '—'}
               </li>
             </ul>
 

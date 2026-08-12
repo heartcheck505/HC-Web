@@ -35,8 +35,6 @@ import {
   API_ENDPOINTS,
   apiClient,
   ApiError,
-  setStoredPatientName,
-  setStoredPhone,
   setStoredUser,
   tokenStorage,
 } from '../../api/apiClient'
@@ -203,6 +201,7 @@ export default function Register() {
 
   const [caregiverName, setCaregiverName] = useState('')
   const [patientName, setPatientName] = useState('')
+  const [patientSecondLastName, setPatientSecondLastName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
@@ -317,8 +316,9 @@ export default function Register() {
         email: email.trim(),
         password,
         firstName: nameParts[0] || caregiverName.trim(),
-        lastName: nameParts.slice(1).join(' ') || 'Méndez',
-        phone: phone.trim() || '***REMOVED***',
+        lastName: nameParts.slice(1).join(' '),
+        secondLastName: patientSecondLastName.trim() || undefined,
+        phone: phone.trim(),
       }
 
       const response = await apiClient.post<{ token?: string }>(
@@ -336,12 +336,6 @@ export default function Register() {
           email: payload.email,
           role: 'Nurse',
         })
-        if (patientName.trim()) {
-          setStoredPatientName(patientName.trim())
-        }
-        if (payload.phone.trim()) {
-          setStoredPhone(payload.phone.trim())
-        }
         navigate('/dashboard', { replace: true })
       } else {
         navigate('/auth/login', { replace: true, state: { registered: true } })
@@ -434,19 +428,30 @@ export default function Register() {
                 />
               </FormField>
 
-              <FormField
-                htmlFor="patientName"
-                label="Nombre Completo del Paciente"
-                error={errors.patientName}
-              >
-                <IconInput
-                  id="patientName"
-                  icon={Users}
-                  value={patientName}
-                  onChange={(event) => setPatientName(event.target.value)}
-                  placeholder="Ej. Nombre Apellido del Paciente"
-                />
-              </FormField>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  htmlFor="patientName"
+                  label="Nombre y Apellido Paterno del Paciente"
+                  error={errors.patientName}
+                >
+                  <IconInput
+                    id="patientName"
+                    icon={Users}
+                    value={patientName}
+                    onChange={(event) => setPatientName(event.target.value)}
+                    placeholder="Ej. Nombre Apellido"
+                  />
+                </FormField>
+                <FormField htmlFor="patientSecondLastName" label="Segundo Apellido">
+                  <IconInput
+                    id="patientSecondLastName"
+                    icon={Users}
+                    value={patientSecondLastName}
+                    onChange={(event) => setPatientSecondLastName(event.target.value)}
+                    placeholder="Ej. Segundo apellido"
+                  />
+                </FormField>
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField htmlFor="email" label="Correo electrónico" error={errors.email}>

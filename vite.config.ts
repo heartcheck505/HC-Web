@@ -44,9 +44,10 @@ export default defineConfig({
       '/api': {
         target:
           process.env.HEARTCHECK_API_PROXY_TARGET ??
-          'http://heartcheckapi.runasp.net',
+          'https://heartcheckapi.runasp.net',
         changeOrigin: true,
-        secure: process.env.HEARTCHECK_API_PROXY_INSECURE !== 'true',
+        // El destino puede ser HTTP local o HTTPS con certificado no confiable.
+        secure: false,
       },
     },
   },

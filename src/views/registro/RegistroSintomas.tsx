@@ -16,7 +16,7 @@ import {
   User,
   X,
 } from 'lucide-react'
-import { API_ENDPOINTS, apiClient, getStoredPatientName } from '../../api/apiClient'
+import { API_ENDPOINTS, apiClient } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 
 const trendBars = [40, 65, 50, 75, 55, 80, 60, 70, 45, 68, 52, 74, 48, 72]
@@ -48,7 +48,6 @@ interface SymptomRecord {
 
 interface SymptomEventPayload {
   type: 'symptom'
-  patientId: string
   symptom: string
   intensity: string
   intensityLevel: number
@@ -95,55 +94,12 @@ function formatTimeLabel(date: Date): string {
   return `${hour12}:${minutes} ${meridiem} - Hoy`
 }
 
-const LOCAL_SYMPTOMS_KEY = 'local_symptoms_history'
-
-const DEFAULT_RECORDS: SymptomRecord[] = [
-  { id: 'rec-1', emoji: '⚡', name: 'Fatiga leve', timeLabel: '10:30 AM - Hoy' },
-  { id: 'rec-2', emoji: '✓', name: 'Sin síntomas', timeLabel: '08:00 AM - Hoy' },
-  { id: 'rec-3', emoji: '💔', name: 'Palpitaciones', timeLabel: '21:15 PM - Ayer' },
-]
-
-function loadLocalRecords(): SymptomRecord[] {
-  try {
-    const raw = window.localStorage.getItem(LOCAL_SYMPTOMS_KEY)
-    if (!raw) {
-      return []
-    }
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-    return parsed.filter(
-      (item): item is SymptomRecord =>
-        typeof item === 'object' &&
-        item !== null &&
-        typeof (item as SymptomRecord).id === 'string' &&
-        typeof (item as SymptomRecord).emoji === 'string' &&
-        typeof (item as SymptomRecord).name === 'string' &&
-        typeof (item as SymptomRecord).timeLabel === 'string',
-    )
-  } catch {
-    return []
-  }
-}
-
-function persistLocalRecords(records: SymptomRecord[]): void {
-  try {
-    window.localStorage.setItem(
-      LOCAL_SYMPTOMS_KEY,
-      JSON.stringify(records.slice(0, 50)),
-    )
-  } catch {
-    return
-  }
-}
-
 const inputClass =
   'w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20'
 
 export default function RegistroSintomas() {
   const toastTimer = useRef<number | null>(null)
-  const patientName = getStoredPatientName() ?? 'Paciente'
+  const patientName = 'Paciente'
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [toast, setToast] = useState<{
@@ -158,10 +114,7 @@ export default function RegistroSintomas() {
   const [intensity, setIntensity] = useState(2)
   const [notes, setNotes] = useState('')
 
-  const [records, setRecords] = useState<SymptomRecord[]>(() => [
-    ...loadLocalRecords(),
-    ...DEFAULT_RECORDS,
-  ])
+  const [records, setRecords] = useState<SymptomRecord[]>([])
 
   const intensityLabel = INTENSITY_LEVELS[intensity - 1]
 
@@ -204,7 +157,6 @@ export default function RegistroSintomas() {
 
     const payload: SymptomEventPayload = {
       type: 'symptom',
-      patientId: 'roberto-m',
       symptom: selected?.label ?? symptom,
       intensity: intensityLabel,
       intensityLevel: intensity,
@@ -232,7 +184,6 @@ export default function RegistroSintomas() {
 
     setRecords((current) => {
       const next = [record, ...current]
-      persistLocalRecords(next)
       return next
     })
     resetForm()
@@ -327,8 +278,8 @@ export default function RegistroSintomas() {
                 </>
               }
             />
-            <PatientStat label="Dispositivo" value="Smartwatch G3" />
-            <PatientStat label="Sincronización" value="Hace 5 min" />
+            <PatientStat label="Dispositivo" value="Sin dispositivo conectado" />
+            <PatientStat label="Sincronización" value="—" />
           </div>
         </section>
 
