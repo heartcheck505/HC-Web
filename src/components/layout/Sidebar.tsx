@@ -20,6 +20,7 @@ import {
   getUserPlan,
   setUserPlan,
 } from '../../api/apiClient'
+import PlanChangeModal from '../plan/PlanChangeModal'
 import type { UserPlan } from '../../types/auth.types'
 
 interface NavItem {
@@ -46,6 +47,7 @@ export default function Sidebar() {
 
   const user = getStoredUser()
   const [plan, setPlan] = useState<UserPlan>(() => getUserPlan())
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const isPremium = plan === 'premium'
 
   const displayName = user
@@ -66,6 +68,13 @@ export default function Sidebar() {
     if (nextPlan === 'basic' && location.pathname === '/dashboard-premium') {
       navigate('/dashboard', { replace: true, state: { upgradeRequired: true } })
     }
+  }
+
+  const handleUpgradeConfirmed = (): void => {
+    setUserPlan('premium')
+    setPlan('premium')
+    setUpgradeOpen(false)
+    navigate('/dashboard-premium')
   }
 
   const visibleNavItems = isPremium
@@ -104,9 +113,10 @@ export default function Sidebar() {
         })}
 
         {!isPremium && (
-          <Link
-            to="/planes"
-            className="mt-3 flex items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+          <button
+            type="button"
+            onClick={() => setUpgradeOpen(true)}
+            className="mt-3 flex w-full items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100"
           >
             <Star className="size-4 shrink-0 text-amber-500" aria-hidden="true" />
             Actualizar a Premium
@@ -114,7 +124,7 @@ export default function Sidebar() {
               className="ml-auto size-4 shrink-0 text-amber-500"
               aria-hidden="true"
             />
-          </Link>
+          </button>
         )}
       </nav>
 
@@ -191,6 +201,15 @@ export default function Sidebar() {
           </button>
         </nav>
       </div>
+
+      <PlanChangeModal
+        open={upgradeOpen}
+        mode="upgrade"
+        planName="Premium"
+        price="$19.99"
+        onClose={() => setUpgradeOpen(false)}
+        onConfirmed={handleUpgradeConfirmed}
+      />
     </aside>
   )
 }

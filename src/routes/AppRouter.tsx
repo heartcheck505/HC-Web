@@ -19,6 +19,14 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return children
 }
 
+// El formulario de registro es exclusivo para usuarios nuevos sin sesión.
+function GuestOnlyRoute({ children }: { children: ReactNode }) {
+  if (isAuthenticated()) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return children
+}
+
 function PremiumRoute({ children }: { children: ReactNode }) {
   if (!isAuthenticated()) {
     return <Navigate to="/auth/login" replace />
@@ -78,7 +86,14 @@ const router = createBrowserRouter([
     ),
   },
   { path: '/auth/login', element: <Login /> },
-  { path: '/auth/register', element: <Register /> },
+  {
+    path: '/auth/register',
+    element: (
+      <GuestOnlyRoute>
+        <Register />
+      </GuestOnlyRoute>
+    ),
+  },
   { path: '*', element: <Navigate to="/" replace /> },
 ])
 

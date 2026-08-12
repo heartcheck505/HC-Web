@@ -1,4 +1,8 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { getUserPlan, isAuthenticated, setUserPlan } from '../api/apiClient'
+import PlanChangeModal from '../components/plan/PlanChangeModal'
+import type { UserPlan } from '../types/auth.types'
 
 type FeatureIcon = 'check' | 'cross' | 'star'
 
@@ -185,7 +189,34 @@ function ComparisonIcon({ value }: { value: string | null }) {
   return <span className="text-slate-700">{value}</span>
 }
 
+interface PlanChangeState {
+  mode: 'upgrade' | 'downgrade'
+  planName: string
+  price: string
+  userPlan: UserPlan
+}
+
+function planIdToUserPlan(planId: string): UserPlan {
+  return planId === 'basico' ? 'basic' : 'premium'
+}
+
 export default function Planes() {
+  const navigate = useNavigate()
+  const authenticated = isAuthenticated()
+  const currentPlan = getUserPlan()
+  const [changeModal, setChangeModal] = useState<PlanChangeState | null>(null)
+
+  const handlePlanConfirmed = (): void => {
+    if (!changeModal) {
+      return
+    }
+    setUserPlan(changeModal.userPlan)
+    setChangeModal(null)
+    navigate(
+      changeModal.userPlan === 'premium' ? '/dashboard-premium' : '/dashboard',
+    )
+  }
+
   return (
     <div className="py-10">
       <div className="mx-auto max-w-3xl px-4 text-center">
@@ -199,47 +230,80 @@ export default function Planes() {
       </div>
 
       <div className="mx-auto mt-8 grid max-w-6xl grid-cols-1 gap-6 px-4 md:grid-cols-3">
-        {plans.map((plan) => (
-          <div
-            key={plan.planId}
-            className={`flex flex-col rounded-2xl p-6 ${plan.cardClass}`}
-          >
-            {plan.badge && (
-              <span
-                className={`absolute right-6 top-6 rounded-full px-3 py-1 text-xs font-semibold ${plan.badgeClass}`}
-              >
-                {plan.badge}
-              </span>
-            )}
-            <h2 className={`text-xl font-bold ${plan.titleClass}`}>{plan.name}</h2>
-            <p className={`mt-1 text-sm ${plan.taglineClass}`}>{plan.tagline}</p>
-            <p className="mt-5">
-              <span className={`text-4xl font-extrabold ${plan.titleClass}`}>
-                {plan.price}
-              </span>
-              <span className={`text-base font-medium ${plan.priceSubClass}`}>
-                /mes
-              </span>
-            </p>
-            <ul className="mt-6 flex-1 space-y-2.5">
-              {plan.features.map((feature) => (
-                <li
-                  key={feature.text}
-                  className="flex items-center gap-2.5 text-sm"
-                >
-                  {renderIcon(feature.icon, plan.iconClass)}
-                  <span className={plan.itemTextClass}>{feature.text}</span>
-                </li>
-              ))}
-            </ul>
-            <Link
-              to={`/auth/register?plan=${plan.planId}`}
+        {plans.map((plan) => {
+          const targetPlan = planIdToUserPlan(plan.planId)
+          const isCurrentPlan = authenticated && currentPlan === targetPlan
+          const isUpgradeTarget = targetPlan === 'premium'
+
+          const ctaButton = isCurrentPlan ? (
+            <span
+              className={`mt-8 rounded-lg px-4 py-2.5 text-center font-semibold opacity-60 ${plan.ctaClass}`}
+            >
+              Tu plan actual
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() =>
+                setChangeModal({
+                  mode: isUpgradeTarget ? 'upgrade' : 'downgrade',
+                  planName: plan.name,
+                  price: plan.price,
+                  userPlan: targetPlan,
+                })
+              }
               className={`mt-8 rounded-lg px-4 py-2.5 text-center font-semibold transition-colors ${plan.ctaClass}`}
             >
-              {plan.ctaLabel}
-            </Link>
-          </div>
-        ))}
+              {isUpgradeTarget ? `Actualizar a ${plan.name}` : 'Cambiar a Básico'}
+            </button>
+          )
+
+          return (
+            <div
+              key={plan.planId}
+              className={`flex flex-col rounded-2xl p-6 ${plan.cardClass}`}
+            >
+              {plan.badge && (
+                <span
+                  className={`absolute right-6 top-6 rounded-full px-3 py-1 text-xs font-semibold ${plan.badgeClass}`}
+                >
+                  {plan.badge}
+                </span>
+              )}
+              <h2 className={`text-xl font-bold ${plan.titleClass}`}>{plan.name}</h2>
+              <p className={`mt-1 text-sm ${plan.taglineClass}`}>{plan.tagline}</p>
+              <p className="mt-5">
+                <span className={`text-4xl font-extrabold ${plan.titleClass}`}>
+                  {plan.price}
+                </span>
+                <span className={`text-base font-medium ${plan.priceSubClass}`}>
+                  /mes
+                </span>
+              </p>
+              <ul className="mt-6 flex-1 space-y-2.5">
+                {plan.features.map((feature) => (
+                  <li
+                    key={feature.text}
+                    className="flex items-center gap-2.5 text-sm"
+                  >
+                    {renderIcon(feature.icon, plan.iconClass)}
+                    <span className={plan.itemTextClass}>{feature.text}</span>
+                  </li>
+                ))}
+              </ul>
+              {authenticated ? (
+                ctaButton
+              ) : (
+                <Link
+                  to={`/auth/register?plan=${plan.planId}`}
+                  className={`mt-8 rounded-lg px-4 py-2.5 text-center font-semibold transition-colors ${plan.ctaClass}`}
+                >
+                  {plan.ctaLabel}
+                </Link>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <section className="mx-auto mt-16 max-w-6xl px-4">
@@ -293,6 +357,15 @@ export default function Planes() {
           </div>
         </div>
       </section>
+
+      <PlanChangeModal
+        open={changeModal !== null}
+        mode={changeModal?.mode ?? 'upgrade'}
+        planName={changeModal?.planName ?? 'Premium'}
+        price={changeModal?.price ?? '$19.99'}
+        onClose={() => setChangeModal(null)}
+        onConfirmed={handlePlanConfirmed}
+      />
     </div>
   )
 }

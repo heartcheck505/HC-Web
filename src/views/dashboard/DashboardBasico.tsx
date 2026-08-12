@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
   Battery,
@@ -23,9 +23,11 @@ import {
   apiClient,
   getStoredUser,
   isAuthenticated,
+  setUserPlan,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
+import PlanChangeModal from '../../components/plan/PlanChangeModal'
 import type { Device } from '../../types/device.types'
 import type { Measurement } from '../../types/measurement.types'
 import type { Patient, PagedResult } from '../../types/patient.types'
@@ -94,6 +96,7 @@ function DeviceVisual({ heartRate }: { heartRate: number }) {
 export default function DashboardBasico() {
   const toastTimer = useRef<number | null>(null)
   const location = useLocation()
+  const navigate = useNavigate()
 
   const currentUser = getStoredUser()
 
@@ -168,6 +171,7 @@ export default function DashboardBasico() {
     const state = location.state as { upgradeRequired?: boolean } | null
     return Boolean(state?.upgradeRequired)
   })
+  const [upgradeFlowOpen, setUpgradeFlowOpen] = useState(false)
   const [symptomName, setSymptomName] = useState('')
   const [symptomIntensity, setSymptomIntensity] = useState('Leve')
   const [symptomNotes, setSymptomNotes] = useState('')
@@ -660,17 +664,40 @@ export default function DashboardBasico() {
               >
                 Ahora no
               </button>
-              <Link
-                to="/planes"
-                onClick={() => setUpgradeOpen(false)}
+              <button
+                type="button"
+                onClick={() => {
+                  setUpgradeOpen(false)
+                  setUpgradeFlowOpen(true)
+                }}
                 className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-blue-700"
               >
-                Ver planes
-              </Link>
+                Actualizar ahora
+              </button>
             </div>
+            <Link
+              to="/planes"
+              onClick={() => setUpgradeOpen(false)}
+              className="mt-3 block text-center text-sm font-medium text-blue-600 hover:underline"
+            >
+              Ver todos los planes →
+            </Link>
           </div>
         </div>
       )}
+
+      <PlanChangeModal
+        open={upgradeFlowOpen}
+        mode="upgrade"
+        planName="Premium"
+        price="$19.99"
+        onClose={() => setUpgradeFlowOpen(false)}
+        onConfirmed={() => {
+          setUserPlan('premium')
+          setUpgradeFlowOpen(false)
+          navigate('/dashboard-premium')
+        }}
+      />
 
       {toast && (
         <div
