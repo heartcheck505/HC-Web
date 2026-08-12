@@ -18,7 +18,14 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { API_ENDPOINTS, apiClient, getStoredPatientName, getStoredUser, shouldUseMockData } from '../../api/apiClient'
+import {
+  API_ENDPOINTS,
+  NO_PATIENT_LABEL,
+  apiClient,
+  getStoredPatientName,
+  getStoredUser,
+  shouldUseMockData,
+} from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import type { Device } from '../../types/device.types'
@@ -63,7 +70,7 @@ const FALLBACK_CONTACT: EmergencyContactInfo = {
 }
 
 const FALLBACK_PATIENT: PatientProfile = {
-  fullName: 'Paciente',
+  fullName: NO_PATIENT_LABEL,
   age: 0,
   address: 'Dirección no registrada',
   tutor: 'Cuidador',
@@ -167,7 +174,7 @@ export default function Pacientes() {
   const sessionPatientName = getStoredPatientName()
 
   const [patient, setPatient] = useState<PatientProfile>(() => ({
-    fullName: sessionPatientName || FALLBACK_PATIENT.fullName,
+    fullName: sessionPatientName || NO_PATIENT_LABEL,
     age: FALLBACK_PATIENT.age,
     address: FALLBACK_PATIENT.address,
     tutor: sessionPersonName || FALLBACK_PATIENT.tutor,
@@ -224,7 +231,7 @@ export default function Pacientes() {
           const apiFullName = `${apiPatient.firstName} ${apiPatient.lastName}`.trim()
           setPatient({
             fullName:
-              apiFullName || sessionPatientName || FALLBACK_PATIENT.fullName,
+              apiFullName || sessionPatientName || NO_PATIENT_LABEL,
             age: apiPatient.birthDate
               ? getAge(apiPatient.birthDate)
               : FALLBACK_PATIENT.age,

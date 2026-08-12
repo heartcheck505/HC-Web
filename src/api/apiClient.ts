@@ -127,6 +127,20 @@ export function getStoredPatientName(): string {
   return `${user.patient.firstName} ${user.patient.lastName}`.trim()
 }
 
+/**
+ * Etiqueta de estado vacío unificada para toda la app: se muestra cuando no
+ * hay paciente registrado en la sesión.
+ */
+export const NO_PATIENT_LABEL = 'Sin paciente registrado'
+
+/**
+ * Fuente única de datos del paciente para la interfaz: nombre desde la sesión
+ * o etiqueta de estado vacío. Todas las vistas deben consumir esta función.
+ */
+export function getStoredPatientDisplayName(): string {
+  return getStoredPatientName() || NO_PATIENT_LABEL
+}
+
 export function setStoredPatient(patient: StoredPatient): void {
   const user = getStoredUser()
   if (!user) {

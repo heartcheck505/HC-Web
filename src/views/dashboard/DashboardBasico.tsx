@@ -21,7 +21,7 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
-  getStoredPatientName,
+  getStoredPatientDisplayName,
   getStoredUser,
   isAuthenticated,
   setStoredPatient,
@@ -108,7 +108,7 @@ export default function DashboardBasico() {
     'Cuidador',
   )
   const [patientName, setPatientName] = useState<string>(
-    () => getStoredPatientName() || 'Paciente',
+    () => getStoredPatientDisplayName(),
   )
   const [device, setDevice] = useState<Device | null>(null)
   const [latestMeasurement, setLatestMeasurement] = useState<Measurement | null>(null)

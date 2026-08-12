@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  NO_PATIENT_LABEL,
   clearSession,
   getDefaultDashboardRoute,
+  getStoredPatientDisplayName,
   getStoredPatientName,
   getStoredToken,
   getStoredUser,
@@ -241,6 +243,30 @@ describe('datos de paciente en sesión', () => {
       firstName: 'Juan',
       lastName: 'García',
     })
+  })
+
+  it('muestra la etiqueta de vacío si no hay paciente registrado', () => {
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    expect(getStoredPatientDisplayName()).toBe(NO_PATIENT_LABEL)
+    expect(getStoredPatientDisplayName()).toBe('Sin paciente registrado')
+  })
+
+  it('usa el nombre de la sesión como única fuente de datos', () => {
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    setStoredPatient({ firstName: 'Juan', lastName: 'García' })
+    expect(getStoredPatientDisplayName()).toBe('Juan García')
   })
 })
 

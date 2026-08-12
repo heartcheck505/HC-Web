@@ -28,7 +28,7 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
-  getStoredPatientName,
+  getStoredPatientDisplayName,
   getStoredUser,
   isAuthenticated,
   setStoredPatient,
@@ -251,7 +251,7 @@ export default function DashboardPremium() {
     'Cuidador',
   )
   const [patientName, setPatientName] = useState<string>(
-    () => getStoredPatientName() || 'Paciente',
+    () => getStoredPatientDisplayName(),
   )
 
   // Indicadores clave: parten en 0 / vacíos / desconectados hasta recibir

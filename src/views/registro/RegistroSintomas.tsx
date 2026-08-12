@@ -16,7 +16,7 @@ import {
   User,
   X,
 } from 'lucide-react'
-import { API_ENDPOINTS, apiClient } from '../../api/apiClient'
+import { API_ENDPOINTS, apiClient, getStoredPatientDisplayName } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 
 const trendBars = [40, 65, 50, 75, 55, 80, 60, 70, 45, 68, 52, 74, 48, 72]
@@ -99,7 +99,7 @@ const inputClass =
 
 export default function RegistroSintomas() {
   const toastTimer = useRef<number | null>(null)
-  const patientName = 'Paciente'
+  const patientName = getStoredPatientDisplayName()
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [toast, setToast] = useState<{
