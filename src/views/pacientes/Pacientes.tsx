@@ -59,13 +59,13 @@ interface ActivityItem {
 const FALLBACK_CONTACT: EmergencyContactInfo = {
   name: 'Cuidador',
   relationship: 'Familiar directo',
-  phone: '***REMOVED***',
+  phone: '+56 9 0000 0000',
 }
 
 const FALLBACK_PATIENT: PatientProfile = {
   fullName: 'Paciente',
   age: 68,
-  address: '***REMOVED***',
+  address: 'Dirección no registrada',
   tutor: 'Cuidador',
   contact: FALLBACK_CONTACT,
 }

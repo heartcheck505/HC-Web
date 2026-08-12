@@ -1,32 +1,46 @@
-# React + TypeScript + Vite
+# HeartCheck Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Plataforma web de telemetría cardíaca en tiempo real para el monitoreo
+continuo de pacientes. SPA construida con React 19, TypeScript y Vite.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- [React](https://react.dev) + [React Router](https://reactrouter.com)
+- [Vite](https://vite.dev) + [TypeScript](https://www.typescriptlang.org)
+- [Tailwind CSS](https://tailwindcss.com)
+- [Oxlint](https://oxc.rs) (linting)
 
-## React Compiler
+## Requisitos
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js 22 (ver `.nvmrc`)
 
-## Expanding the Oxlint configuration
+## Scripts
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+| Comando | Descripción |
+| --- | --- |
+| `npm run dev` | Servidor de desarrollo con HMR |
+| `npm run build` | Typecheck (`tsc -b`) + build de producción |
+| `npm run lint` | Oxlint |
+| `npm test` | Vitest (unit tests) |
+| `npm run preview` | Previsualizar el build de producción |
+| `npm audit` | Auditoría de vulnerabilidades de dependencias |
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+## Variables de entorno
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Copia `.env.example` a `.env` y ajusta los valores. Solo las variables
+prefijadas con `VITE_` se exponen al cliente; úsalas únicamente para valores
+no sensibles.
+
+| Variable | Descripción |
+| --- | --- |
+| `VITE_API_BASE_URL` | URL absoluta de la API (solo HTTPS en producción). Por defecto `/api` |
+| `VITE_USE_MOCK_DATA` | `true`/`false`: fuerza el uso de datos de prueba |
+| `HEARTCHECK_API_PROXY_TARGET` | Destino del proxy `/api` en desarrollo (no expuesto al cliente) |
+
+## Seguridad
+
+- La API se consume con URL relativa (`/api`) para evitar Mixed Content.
+- CSP inyectada en el build de producción (ver `vite.config.ts`).
+- CI/CD: lint, tests, build, `npm audit`, Gitleaks y CodeQL (ver
+  `.github/workflows`).
+- Para reportar vulnerabilidades consulta [SECURITY.md](SECURITY.md).

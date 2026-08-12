@@ -430,7 +430,7 @@ export default function Register() {
                   icon={User}
                   value={caregiverName}
                   onChange={(event) => setCaregiverName(event.target.value)}
-                  placeholder="Ej. ***REMOVED***"
+                  placeholder="Ej. Nombre Apellido"
                 />
               </FormField>
 
@@ -444,7 +444,7 @@ export default function Register() {
                   icon={Users}
                   value={patientName}
                   onChange={(event) => setPatientName(event.target.value)}
-                  placeholder="Ej. ***REMOVED***"
+                  placeholder="Ej. Nombre Apellido del Paciente"
                 />
               </FormField>
 
@@ -457,7 +457,7 @@ export default function Register() {
                     autoComplete="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="***REMOVED***"
+                    placeholder="nombre@ejemplo.com"
                   />
                 </FormField>
                 <FormField htmlFor="phone" label="Teléfono">
@@ -468,7 +468,7 @@ export default function Register() {
                     autoComplete="tel"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
-                    placeholder="***REMOVED***"
+                    placeholder="+52 55 0000 0000"
                   />
                 </FormField>
               </div>
@@ -551,7 +551,7 @@ export default function Register() {
                   icon={MapPin}
                   value={address}
                   onChange={(event) => setAddress(event.target.value)}
-                  placeholder="***REMOVED***"
+                  placeholder="Av. Ejemplo 123, Ciudad"
                 />
               </FormField>
             </div>
@@ -598,7 +598,7 @@ export default function Register() {
                   icon={User}
                   value={physician}
                   onChange={(event) => setPhysician(event.target.value)}
-                  placeholder="Ej. Dr. ***REMOVED*** (o Sin doctor asignado)"
+                  placeholder="Ej. Dr. Nombre Apellido (o Sin doctor asignado)"
                 />
               </FormField>
             </div>
@@ -612,7 +612,7 @@ export default function Register() {
                   icon={Users}
                   value={emergencyName}
                   onChange={(event) => setEmergencyName(event.target.value)}
-                  placeholder="Ej. ***REMOVED***"
+                  placeholder="Ej. Nombre Apellido"
                 />
               </FormField>
               <FormField htmlFor="emergencyRelationship" label="Parentesco / Relación">
@@ -637,7 +637,7 @@ export default function Register() {
                   type="tel"
                   value={emergencyPhone}
                   onChange={(event) => setEmergencyPhone(event.target.value)}
-                  placeholder="***REMOVED***"
+                  placeholder="+52 55 0000 0000"
                 />
               </FormField>
               <FormField htmlFor="emergencyEmail" label="Correo de Emergencia">
@@ -647,7 +647,7 @@ export default function Register() {
                   type="email"
                   value={emergencyEmail}
                   onChange={(event) => setEmergencyEmail(event.target.value)}
-                  placeholder="***REMOVED***"
+                  placeholder="nombre@ejemplo.com"
                 />
               </FormField>
             </div>
