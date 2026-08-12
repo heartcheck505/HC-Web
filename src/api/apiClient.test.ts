@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   API_ENDPOINTS,
   NO_PATIENT_LABEL,
+  backupPatientToLocal,
   buildPatientMePayload,
   clearSession,
+  getBackedUpPatient,
   getDefaultDashboardRoute,
   getStoredPatientDisplayName,
   getStoredPatientName,
@@ -12,6 +14,7 @@ import {
   getUserPlan,
   isAuthenticated,
   normalizeStoredUser,
+  restorePatientProfile,
   setStoredPatient,
   setStoredToken,
   setStoredUser,
@@ -19,16 +22,26 @@ import {
   shouldUseMockData,
 } from './apiClient'
 
-const storage = new Map<string, string>()
+const sessionStorage = new Map<string, string>()
+const localStorage = new Map<string, string>()
 
 const fakeWindow = {
   sessionStorage: {
-    getItem: (key: string): string | null => storage.get(key) ?? null,
+    getItem: (key: string): string | null => sessionStorage.get(key) ?? null,
     setItem: (key: string, value: string): void => {
-      storage.set(key, value)
+      sessionStorage.set(key, value)
     },
     removeItem: (key: string): void => {
-      storage.delete(key)
+      sessionStorage.delete(key)
+    },
+  },
+  localStorage: {
+    getItem: (key: string): string | null => localStorage.get(key) ?? null,
+    setItem: (key: string, value: string): void => {
+      localStorage.set(key, value)
+    },
+    removeItem: (key: string): void => {
+      localStorage.delete(key)
     },
   },
   location: {
@@ -38,10 +51,22 @@ const fakeWindow = {
   },
 }
 
+const okJsonResponse = (body: unknown): unknown => ({
+  status: 200,
+  ok: true,
+  headers: { get: (): string => 'application/json' },
+  json: async (): Promise<unknown> => body,
+})
+
 beforeEach(() => {
-  storage.clear()
+  sessionStorage.clear()
+  localStorage.clear()
   vi.stubEnv('VITE_USE_MOCK_DATA', undefined)
   ;(globalThis as unknown as { window: typeof fakeWindow }).window = fakeWindow
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('tokenStorage', () => {
@@ -83,7 +108,7 @@ describe('user storage', () => {
   })
 
   it('descarta datos de usuario corruptos', () => {
-    storage.set('heartcheck.user', '{no-json')
+    sessionStorage.set('heartcheck.user', '{no-json')
     expect(getStoredUser()).toBeNull()
   })
 })
@@ -378,5 +403,150 @@ describe('endpoints de producción', () => {
     expect(API_ENDPOINTS.devices.register).toBe('/devices')
     expect(API_ENDPOINTS.notifications.list).toBe('/notifications')
     expect(API_ENDPOINTS.statistics.daily).toBe('/statistics/daily')
+  })
+})
+
+describe('respaldo de paciente por usuario', () => {
+  it('respaldar en localStorage al guardar el paciente en la sesión', () => {
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    setStoredPatient({ firstName: 'Juan', lastName: 'García' })
+    expect(getBackedUpPatient()).toEqual({ firstName: 'Juan', lastName: 'García' })
+    expect(localStorage.get('patient_data_ana@example.com')).not.toBeNull()
+    expect(localStorage.get('patient_data_ANA@EXAMPLE.COM')).toBeUndefined()
+  })
+
+  it('usa el respaldo local si la sesión no tiene paciente', () => {
+    setStoredUser({
+      id: 'u2',
+      firstName: 'Luis',
+      lastName: 'Ruiz',
+      email: 'luis@example.com',
+      role: 'Nurse',
+    })
+    expect(getStoredPatientDisplayName()).toBe(NO_PATIENT_LABEL)
+    backupPatientToLocal('luis@example.com', {
+      firstName: 'María',
+      lastName: 'López',
+    })
+    expect(getStoredPatientName()).toBe('')
+    expect(getStoredPatientDisplayName()).toBe('María López')
+  })
+
+  it('descarta respaldos corruptos', () => {
+    setStoredUser({
+      id: 'u3',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    localStorage.set('patient_data_ana@example.com', '{no-json')
+    expect(getBackedUpPatient()).toBeNull()
+    expect(getStoredPatientDisplayName()).toBe(NO_PATIENT_LABEL)
+  })
+
+  it('no accede al respaldo sin usuario en sesión', () => {
+    const spy = vi.spyOn(localStorage, 'get')
+    expect(getBackedUpPatient()).toBeNull()
+    expect(spy).not.toHaveBeenCalled()
+    expect(getStoredPatientDisplayName()).toBe(NO_PATIENT_LABEL)
+  })
+})
+
+describe('cierre de sesión', () => {
+  it('limpia la sesión pero conserva el respaldo por usuario', () => {
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    setStoredPatient({ firstName: 'Juan', lastName: 'García' })
+    expect(localStorage.get('patient_data_ana@example.com')).not.toBeNull()
+    clearSession()
+    expect(getStoredToken()).toBeNull()
+    expect(getStoredUser()).toBeNull()
+    expect(localStorage.get('patient_data_ana@example.com')).not.toBeNull()
+    // Al volver a iniciar sesión con la misma cuenta se restablece el paciente.
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    expect(getStoredPatientDisplayName()).toBe('Juan García')
+  })
+})
+
+describe('restorePatientProfile', () => {
+  it('almacena el paciente devuelto por GET /api/patients/me', async () => {
+    setStoredToken('jwt-test')
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        okJsonResponse({ firstName: 'Juan', lastName: 'García' }),
+      ),
+    )
+    const restored = await restorePatientProfile()
+    expect(restored).toBe(true)
+    expect(getStoredPatientDisplayName()).toBe('Juan García')
+    expect(getBackedUpPatient()).toEqual({
+      firstName: 'Juan',
+      lastName: 'García',
+    })
+  })
+
+  it('cae al respaldo local si la API falla', async () => {
+    setStoredToken('jwt-test')
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    backupPatientToLocal('ana@example.com', {
+      firstName: 'María',
+      lastName: 'López',
+    })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')))
+    const restored = await restorePatientProfile()
+    expect(restored).toBe(true)
+    expect(getStoredPatientDisplayName()).toBe('María López')
+  })
+
+  it('no falla sin respaldo ni perfil en la API', async () => {
+    setStoredToken('jwt-test')
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        okJsonResponse({ firstName: '', lastName: '' }),
+      ),
+    )
+    const restored = await restorePatientProfile()
+    expect(restored).toBe(false)
+    expect(getStoredPatientDisplayName()).toBe(NO_PATIENT_LABEL)
   })
 })

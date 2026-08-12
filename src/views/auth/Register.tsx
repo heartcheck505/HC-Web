@@ -36,6 +36,7 @@ import {
   apiClient,
   ApiError,
   normalizeStoredUser,
+  setStoredPatient,
   setStoredUser,
   tokenStorage,
 } from '../../api/apiClient'
@@ -345,14 +346,13 @@ export default function Register() {
           plan: sessionPlan,
         }
         // Persistencia del paciente/tutor en la sesión para que no se pierda
-        // al navegar o actualizar la página.
-        setStoredUser({
-          ...sessionUser,
-          patient: {
-            firstName: patientNameParts[0] ?? '',
-            lastName: patientNameParts.slice(1).join(' ') || '',
-            secondLastName: patientSecondLastName.trim() || undefined,
-          },
+        // al navegar o actualizar la página. `setStoredPatient` además escribe
+        // el respaldo por usuario en `localStorage`.
+        setStoredUser(sessionUser)
+        setStoredPatient({
+          firstName: patientNameParts[0] ?? '',
+          lastName: patientNameParts.slice(1).join(' ') || '',
+          secondLastName: patientSecondLastName.trim() || undefined,
         })
         navigate(
           sessionPlan === 'premium' ? '/dashboard-premium' : '/dashboard',

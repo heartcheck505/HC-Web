@@ -53,6 +53,12 @@ const LEGACY_PII_STORAGE_KEYS = [
   'heartcheck.phone',
   'local_symptoms_history',
 ]
+/**
+ * Prefijo de los respaldos de paciente en `localStorage` vinculados al email
+ * del usuario (p. ej. `patient_data_{userEmail}`). Sobreviven al cierre de
+ * sesión para que el perfil se restablezca al volver a autenticarse.
+ */
+const PATIENT_BACKUP_KEY_PREFIX = 'patient_data_'
 const LOGIN_PATH = '/auth/login'
 
 export interface ApiErrorPayload {
@@ -149,11 +155,16 @@ export function getStoredPatientName(): string {
 export const NO_PATIENT_LABEL = 'Sin paciente registrado'
 
 /**
- * Fuente única de datos del paciente para la interfaz: nombre desde la sesión
- * o etiqueta de estado vacío. Todas las vistas deben consumir esta función.
+ * Fuente única de datos del paciente para la interfaz: nombre desde la sesión,
+ * respaldo local vinculado al email del usuario o etiqueta de estado vacío.
+ * Todas las vistas deben consumir esta función.
  */
 export function getStoredPatientDisplayName(): string {
-  return getStoredPatientName() || NO_PATIENT_LABEL
+  return (
+    getStoredPatientName() ||
+    getBackedUpPatientName() ||
+    NO_PATIENT_LABEL
+  )
 }
 
 export function setStoredPatient(patient: StoredPatient): void {
@@ -162,6 +173,105 @@ export function setStoredPatient(patient: StoredPatient): void {
     return
   }
   setStoredUser({ ...user, patient })
+  // Respaldo por usuario en localStorage: sobrevive al cierre de sesión.
+  backupPatientToLocal(user.email, patient)
+}
+
+function patientBackupKey(email: string): string {
+  return `${PATIENT_BACKUP_KEY_PREFIX}${email.trim().toLowerCase()}`
+}
+
+function isValidStoredPatient(value: unknown): value is StoredPatient {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const candidate = value as Record<string, unknown>
+  return (
+    typeof candidate.firstName === 'string' &&
+    typeof candidate.lastName === 'string'
+  )
+}
+
+/**
+ * Guarda una copia del paciente en `localStorage` asociada al email de la
+ * cuenta, de modo que al volver a iniciar sesión se pueda restablecer aunque
+ * la API no devuelva el perfil.
+ */
+export function backupPatientToLocal(
+  email: string,
+  patient: StoredPatient,
+): void {
+  if (!email || !isValidStoredPatient(patient)) {
+    return
+  }
+  try {
+    window.localStorage.setItem(
+      patientBackupKey(email),
+      JSON.stringify(patient),
+    )
+  } catch {
+    // localStorage no disponible o lleno: el respaldo se omite sin romper el
+    // flujo de guardado de la sesión.
+  }
+}
+
+/**
+ * Paciente respaldado en `localStorage` para la cuenta autenticada, o `null`
+ * si no existe. La fuente primaria sigue siendo `sessionStorage`; este respaldo
+ * es solo el fallback para cuando la API no devuelve el perfil.
+ */
+export function getBackedUpPatient(): StoredPatient | null {
+  const email = getStoredUser()?.email
+  if (!email) {
+    return null
+  }
+  try {
+    const raw = window.localStorage.getItem(patientBackupKey(email))
+    if (!raw) {
+      return null
+    }
+    const parsed: unknown = JSON.parse(raw)
+    return isValidStoredPatient(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function getBackedUpPatientName(): string {
+  const backup = getBackedUpPatient()
+  if (!backup) {
+    return ''
+  }
+  return `${backup.firstName} ${backup.lastName}`.trim()
+}
+
+/**
+ * Restablece el paciente de la sesión tras autenticarse:
+ * 1. Intenta `GET /api/patients/me` con el token recién guardado.
+ * 2. Si la API no devuelve el perfil (o el backend está inactivo), cae al
+ *    respaldo local de `localStorage` asociado al email de la cuenta.
+ *
+ * Devuelve `true` si el paciente quedó disponible en la sesión.
+ */
+export async function restorePatientProfile(): Promise<boolean> {
+  try {
+    const profile = await getPatientMe()
+    const firstName = profile?.firstName?.trim()
+    const lastName = profile?.lastName?.trim()
+    if (firstName && lastName) {
+      setStoredPatient({ firstName, lastName })
+      return true
+    }
+  } catch {
+    // Backend inactivo, sin token válido o perfil inexistente: se usa el
+    // respaldo local.
+  }
+  const backup = getBackedUpPatient()
+  if (backup) {
+    setStoredPatient(backup)
+    return true
+  }
+  return false
 }
 
 export function removeStoredUser(): void {
@@ -260,6 +370,9 @@ export function normalizeStoredUser(payload: unknown): UserDto | null {
 export function clearSession(): void {
   removeStoredToken()
   removeStoredUser()
+  // Los respaldos por usuario (`patient_data_{userEmail}`) se conservan
+  // adrede en `localStorage` para restablecer el paciente al volver a
+  // iniciar sesión con la misma cuenta.
   // Remove data written by earlier client versions during the migration.
   for (const key of LEGACY_PII_STORAGE_KEYS) {
     window.localStorage?.removeItem(key)

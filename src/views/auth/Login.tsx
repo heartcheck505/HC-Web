@@ -15,6 +15,7 @@ import {
   apiClient,
   ApiError,
   normalizeStoredUser,
+  restorePatientProfile,
   setStoredUser,
   tokenStorage,
 } from '../../api/apiClient'
@@ -92,6 +93,10 @@ export default function Login() {
         return
       }
       setStoredUser(sessionUser)
+      // Restaura el paciente de la cuenta inmediatamente después de guardar
+      // el token: primero desde GET /api/patients/me y, si la API no trae el
+      // perfil o está inactiva, desde el respaldo local del usuario.
+      await restorePatientProfile()
       // Ruta inicial según licencia: Premium → /dashboard-premium,
       // Básico → /dashboard (a menos que exista una redirección explícita).
       const defaultRoute =
