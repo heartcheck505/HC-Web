@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  Sparkles,
   Users,
 } from 'lucide-react'
 import { clearSession, getStoredUser } from '../../api/apiClient'
@@ -19,6 +20,11 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+  {
+    label: 'Dashboard Premium',
+    to: '/dashboard-premium',
+    icon: Sparkles,
+  },
   { label: 'Registro', to: '/registro', icon: FileText },
   { label: 'Pacientes', to: '/pacientes', icon: Users },
 ]

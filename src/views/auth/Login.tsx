@@ -14,6 +14,7 @@ import {
   API_ENDPOINTS,
   apiClient,
   ApiError,
+  normalizeStoredUser,
   setStoredUser,
   tokenStorage,
 } from '../../api/apiClient'
@@ -80,7 +81,17 @@ export default function Login() {
         { skipAuthRedirect: true },
       )
       tokenStorage.set(response.token)
-      setStoredUser(response.user)
+      const sessionUser =
+        normalizeStoredUser(response) ??
+        normalizeStoredUser({ email: email.trim() })
+      if (!sessionUser) {
+        setErrors({
+          form:
+            'No se pudo recuperar el perfil de la cuenta. Intente nuevamente.',
+        })
+        return
+      }
+      setStoredUser(sessionUser)
       navigate(redirect, { replace: true })
     } catch (error) {
       if (error instanceof ApiError) {

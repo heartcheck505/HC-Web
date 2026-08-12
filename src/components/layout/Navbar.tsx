@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { clearSession, isAuthenticated } from '../../api/apiClient'
+import { clearSession, getStoredUser, isAuthenticated } from '../../api/apiClient'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
   `rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -11,6 +11,10 @@ const navLinkClass = ({ isActive }: { isActive: boolean }): string =>
 export default function Navbar() {
   const navigate = useNavigate()
   const authenticated = isAuthenticated()
+  const user = getStoredUser()
+  const displayName = user
+    ? `${user.firstName} ${user.lastName}`.trim()
+    : null
 
   const handleLogout = (): void => {
     clearSession()
@@ -57,13 +61,20 @@ export default function Navbar() {
 
         <div className="flex items-center gap-3">
           {authenticated ? (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-700"
-            >
-              Cerrar sesión
-            </button>
+            <>
+              {displayName && (
+                <span className="hidden max-w-40 truncate text-sm font-medium text-slate-600 sm:block">
+                  Hola, {displayName}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-700"
+              >
+                Cerrar sesión
+              </button>
+            </>
           ) : (
             <Link
               to="/auth/login"

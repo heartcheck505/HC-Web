@@ -61,6 +61,9 @@ export interface ClinicalRegisterRequest {
 
 export interface RegisterResponse {
   token?: string
+  user?: UserDto
+  /** Nombre completo tal como lo devuelven algunos backends. */
+  nombre?: string
 }
 
 export interface UserDto {

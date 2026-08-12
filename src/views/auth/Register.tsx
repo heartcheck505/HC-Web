@@ -35,12 +35,14 @@ import {
   API_ENDPOINTS,
   apiClient,
   ApiError,
+  normalizeStoredUser,
   setStoredUser,
   tokenStorage,
 } from '../../api/apiClient'
 import type {
   BloodGroup,
   RegisterRequest,
+  RegisterResponse,
   Relationship,
 } from '../../types/auth.types'
 
@@ -321,7 +323,7 @@ export default function Register() {
         phone: phone.trim(),
       }
 
-      const response = await apiClient.post<{ token?: string }>(
+      const response = await apiClient.post<RegisterResponse>(
         API_ENDPOINTS.auth.register,
         payload,
         { skipAuthRedirect: true },
@@ -329,13 +331,14 @@ export default function Register() {
 
       if (response?.token) {
         tokenStorage.set(response.token)
-        setStoredUser({
+        const sessionUser = normalizeStoredUser(response) ?? {
           id: 'local-user',
           firstName: payload.firstName,
           lastName: payload.lastName,
           email: payload.email,
-          role: 'Nurse',
-        })
+          role: 'Nurse' as const,
+        }
+        setStoredUser(sessionUser)
         navigate('/dashboard', { replace: true })
       } else {
         navigate('/auth/login', { replace: true, state: { registered: true } })

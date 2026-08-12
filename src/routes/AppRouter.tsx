@@ -6,6 +6,7 @@ import LandingPage from '../views/LandingPage'
 import Planes from '../views/Planes'
 import Soporte from '../views/Soporte'
 import DashboardBasico from '../views/dashboard/DashboardBasico'
+import DashboardPremium from '../views/dashboard/DashboardPremium'
 import RegistroSintomas from '../views/registro/RegistroSintomas'
 import Pacientes from '../views/pacientes/Pacientes'
 import Login from '../views/auth/Login'
@@ -32,6 +33,14 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <DashboardBasico />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/dashboard-premium',
+    element: (
+      <ProtectedRoute>
+        <DashboardPremium />
       </ProtectedRoute>
     ),
   },

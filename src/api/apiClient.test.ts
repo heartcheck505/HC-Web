@@ -4,6 +4,7 @@ import {
   getStoredToken,
   getStoredUser,
   isAuthenticated,
+  normalizeStoredUser,
   setStoredToken,
   setStoredUser,
   shouldUseMockData,
@@ -86,5 +87,68 @@ describe('shouldUseMockData', () => {
   it('no usa datos de prueba con sesión activa', () => {
     setStoredToken('jwt-test')
     expect(shouldUseMockData()).toBe(false)
+  })
+})
+
+describe('normalizeStoredUser', () => {
+  it('normaliza el objeto user anidado del backend', () => {
+    const user = normalizeStoredUser({
+      token: 'jwt-test',
+      user: {
+        id: 'u1',
+        firstName: 'Ana',
+        lastName: 'Pérez',
+        email: 'ana@example.com',
+        role: 'Nurse',
+      },
+    })
+    expect(user).toMatchObject({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+  })
+
+  it('usa el campo nombre cuando el backend no envía firstName', () => {
+    const user = normalizeStoredUser({
+      token: 'jwt-test',
+      user: { id: 'u2', nombre: 'Carlos Ruiz', email: 'carlos@example.com' },
+    })
+    expect(user).toMatchObject({
+      firstName: 'Carlos',
+      lastName: 'Ruiz',
+      email: 'carlos@example.com',
+    })
+  })
+
+  it('acepta nombre a nivel raíz del payload', () => {
+    const user = normalizeStoredUser({
+      token: 'jwt-test',
+      nombre: 'María López',
+      email: 'maria@example.com',
+    })
+    expect(user).toMatchObject({
+      firstName: 'María',
+      lastName: 'López',
+    })
+  })
+
+  it('deriva el nombre del correo como último recurso', () => {
+    const user = normalizeStoredUser({
+      token: 'jwt-test',
+      email: 'ana.maria@example.com',
+    })
+    expect(user).toMatchObject({
+      firstName: 'Ana Maria',
+      email: 'ana.maria@example.com',
+    })
+  })
+
+  it('descarta payloads sin identidad alguna', () => {
+    expect(normalizeStoredUser(null)).toBeNull()
+    expect(normalizeStoredUser('texto')).toBeNull()
+    expect(normalizeStoredUser({ token: 'jwt-test' })).toBeNull()
   })
 })

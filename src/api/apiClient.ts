@@ -94,6 +94,76 @@ export function removeStoredUser(): void {
   window.sessionStorage.removeItem(USER_STORAGE_KEY)
 }
 
+function asString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
+/**
+ * Normaliza el payload de autenticación del backend (o un login local) a un
+ * `UserDto` persistible en `sessionStorage`.
+ *
+ * DevSecOps:
+ * - Acepta formatos variados del backend (`user` anidado, `nombre` en vez de
+ *   `firstName`/`lastName`) y deriva el nombre del correo como último recurso,
+ *   evitando fallar con "Usuario invitado" cuando el backend no devuelve el
+ *   perfil.
+ * - Devuelve `null` únicamente si no hay forma de obtener identidad alguna
+ *   (nunca fabrica nombres ficticios ni datos PII inventados).
+ */
+export function normalizeStoredUser(payload: unknown): UserDto | null {
+  if (typeof payload !== 'object' || payload === null) {
+    return null
+  }
+  const raw = payload as Record<string, unknown>
+  const nested =
+    typeof raw.user === 'object' && raw.user !== null
+      ? (raw.user as Record<string, unknown>)
+      : null
+
+  const id = asString(nested?.id ?? raw.id)
+  const email = asString(nested?.email ?? raw.email)
+  const role = asString(nested?.role ?? raw.role)
+
+  let firstName = asString(nested?.firstName ?? raw.firstName)
+  let lastName = asString(nested?.lastName ?? raw.lastName)
+
+  const nombre = asString(nested?.nombre ?? raw.nombre)
+  if (nombre && firstName === null && lastName === null) {
+    const parts = nombre.split(/\s+/).filter(Boolean)
+    firstName = parts[0] ?? null
+    lastName = parts.slice(1).join(' ') || null
+  }
+
+  if (firstName === null && email !== null) {
+    const localPart = email.split('@')[0] ?? ''
+    firstName = localPart
+      .replace(/[._-]+/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+  }
+
+  if (firstName === null && lastName === null) {
+    return null
+  }
+
+  return {
+    id: id ?? email ?? 'local-user',
+    firstName: firstName ?? '',
+    lastName: lastName ?? '',
+    email: email ?? '',
+    role:
+      role === 'Admin' || role === 'Medic' || role === 'Nurse'
+        ? role
+        : 'Nurse',
+  }
+}
+
 export function clearSession(): void {
   removeStoredToken()
   removeStoredUser()
