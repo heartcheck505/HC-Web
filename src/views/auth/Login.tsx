@@ -38,7 +38,7 @@ const roleTabs: { id: Role; label: string; icon: typeof UserRound }[] = [
 export default function Login() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const redirect = searchParams.get('redirect') ?? '/dashboard'
+  const explicitRedirect = searchParams.get('redirect')
 
   const [activeRole, setActiveRole] = useState<Role>('cuidador')
   const [email, setEmail] = useState('')
@@ -92,7 +92,11 @@ export default function Login() {
         return
       }
       setStoredUser(sessionUser)
-      navigate(redirect, { replace: true })
+      // Ruta inicial según licencia: Premium → /dashboard-premium,
+      // Básico → /dashboard (a menos que exista una redirección explícita).
+      const defaultRoute =
+        sessionUser.plan === 'premium' ? '/dashboard-premium' : '/dashboard'
+      navigate(explicitRedirect ?? defaultRoute, { replace: true })
     } catch (error) {
       if (error instanceof ApiError) {
         setErrors({

@@ -30,10 +30,15 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
   { label: 'Registro', to: '/registro', icon: FileText },
   { label: 'Pacientes', to: '/pacientes', icon: Users },
 ]
+
+const basicDashboardNavItem: NavItem = {
+  label: 'Dashboard',
+  to: '/dashboard',
+  icon: LayoutDashboard,
+}
 
 const premiumNavItem: NavItem = {
   label: 'Dashboard Premium',
@@ -65,6 +70,10 @@ export default function Sidebar() {
   const handlePlanChange = (nextPlan: UserPlan): void => {
     setUserPlan(nextPlan)
     setPlan(nextPlan)
+    if (nextPlan === 'premium' && location.pathname !== '/dashboard-premium') {
+      navigate('/dashboard-premium')
+      return
+    }
     if (nextPlan === 'basic' && location.pathname === '/dashboard-premium') {
       navigate('/dashboard', { replace: true, state: { upgradeRequired: true } })
     }
@@ -78,8 +87,8 @@ export default function Sidebar() {
   }
 
   const visibleNavItems = isPremium
-    ? [...navItems, premiumNavItem]
-    : navItems
+    ? [premiumNavItem, ...navItems]
+    : [basicDashboardNavItem, ...navItems]
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-slate-200 bg-white px-4 py-6 lg:flex">

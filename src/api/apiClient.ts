@@ -21,7 +21,12 @@
  * - Ante un 401 Unauthorized se limpia la sesión y se redirige a
  *   `/auth/login`.
  */
-import type { AuthErrorResponse, UserDto, UserPlan } from '../types/auth.types'
+import type {
+  AuthErrorResponse,
+  StoredPatient,
+  UserDto,
+  UserPlan,
+} from '../types/auth.types'
 
 export const API_BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL || '/api'
@@ -103,6 +108,33 @@ export function setUserPlan(plan: UserPlan): void {
   setStoredUser({ ...user, plan })
 }
 
+/**
+ * Ruta inicial por defecto según la licencia del usuario autenticado.
+ */
+export function getDefaultDashboardRoute(): string {
+  return getUserPlan() === 'premium' ? '/dashboard-premium' : '/dashboard'
+}
+
+/**
+ * Nombre completo del paciente/tutor persistido en la sesión. Devuelve una
+ * cadena vacía si el usuario aún no registró esos datos.
+ */
+export function getStoredPatientName(): string {
+  const user = getStoredUser()
+  if (!user?.patient) {
+    return ''
+  }
+  return `${user.patient.firstName} ${user.patient.lastName}`.trim()
+}
+
+export function setStoredPatient(patient: StoredPatient): void {
+  const user = getStoredUser()
+  if (!user) {
+    return
+  }
+  setStoredUser({ ...user, patient })
+}
+
 export function removeStoredUser(): void {
   window.sessionStorage.removeItem(USER_STORAGE_KEY)
 }
@@ -145,6 +177,19 @@ export function normalizeStoredUser(payload: unknown): UserDto | null {
   const plan: UserPlan =
     (asString(nested?.plan ?? raw.plan) === 'premium' ? 'premium' : 'basic')
 
+  const rawPatient = nested?.patient ?? raw.patient
+  const patient: StoredPatient | undefined =
+    typeof rawPatient === 'object' &&
+    rawPatient !== null &&
+    typeof (rawPatient as StoredPatient).firstName === 'string' &&
+    typeof (rawPatient as StoredPatient).lastName === 'string'
+      ? {
+          firstName: (rawPatient as StoredPatient).firstName,
+          lastName: (rawPatient as StoredPatient).lastName,
+          secondLastName: (rawPatient as StoredPatient).secondLastName,
+        }
+      : undefined
+
   let firstName = asString(nested?.firstName ?? raw.firstName)
   let lastName = asString(nested?.lastName ?? raw.lastName)
 
@@ -179,6 +224,7 @@ export function normalizeStoredUser(payload: unknown): UserDto | null {
         ? role
         : 'Nurse',
     plan,
+    patient,
   }
 }
 

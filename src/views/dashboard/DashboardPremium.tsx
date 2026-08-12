@@ -28,8 +28,10 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
+  getStoredPatientName,
   getStoredUser,
   isAuthenticated,
+  setStoredPatient,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
@@ -248,7 +250,9 @@ export default function DashboardPremium() {
     getFirstName(currentUser?.firstName) ||
     'Cuidador',
   )
-  const [patientName, setPatientName] = useState<string>('Paciente')
+  const [patientName, setPatientName] = useState<string>(
+    () => getStoredPatientName() || 'Paciente',
+  )
 
   // Indicadores clave: parten en 0 / vacíos / desconectados hasta recibir
   // telemetría real de la API o del reloj.
@@ -297,6 +301,12 @@ export default function DashboardPremium() {
         const fullName = `${profile.firstName} ${profile.lastName}`.trim()
         if (fullName) {
           setPatientName(fullName)
+          // Persiste en la sesión para no perder el nombre al navegar.
+          setStoredPatient({
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            secondLastName: profile.secondLastName ?? undefined,
+          })
         }
       })
       .catch(() => {

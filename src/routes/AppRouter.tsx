@@ -27,6 +27,18 @@ function GuestOnlyRoute({ children }: { children: ReactNode }) {
   return children
 }
 
+// Dashboard Básico: exclusivo para licencia 'basic'. Un usuario Premium que
+// navegue a `/dashboard` es redirigido a `/dashboard-premium`.
+function BasicDashboardRoute({ children }: { children: ReactNode }) {
+  if (!isAuthenticated()) {
+    return <Navigate to="/auth/login" replace />
+  }
+  if (getUserPlan() === 'premium') {
+    return <Navigate to="/dashboard-premium" replace />
+  }
+  return children
+}
+
 function PremiumRoute({ children }: { children: ReactNode }) {
   if (!isAuthenticated()) {
     return <Navigate to="/auth/login" replace />
@@ -56,9 +68,9 @@ const router = createBrowserRouter([
   {
     path: '/dashboard',
     element: (
-      <ProtectedRoute>
+      <BasicDashboardRoute>
         <DashboardBasico />
-      </ProtectedRoute>
+      </BasicDashboardRoute>
     ),
   },
   {

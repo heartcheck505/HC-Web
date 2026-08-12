@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   clearSession,
+  getDefaultDashboardRoute,
+  getStoredPatientName,
   getStoredToken,
   getStoredUser,
   getUserPlan,
   isAuthenticated,
   normalizeStoredUser,
+  setStoredPatient,
   setStoredToken,
   setStoredUser,
   setUserPlan,
@@ -198,5 +201,70 @@ describe('plan de usuario', () => {
     setUserPlan('premium')
     expect(getUserPlan()).toBe('basic')
     expect(getStoredUser()).toBeNull()
+  })
+})
+
+describe('datos de paciente en sesión', () => {
+  it('persiste y recupera el nombre del paciente', () => {
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    expect(getStoredPatientName()).toBe('')
+    setStoredPatient({
+      firstName: 'Juan',
+      lastName: 'García',
+      secondLastName: 'López',
+    })
+    expect(getStoredPatientName()).toBe('Juan García')
+    expect(getStoredUser()?.patient).toEqual({
+      firstName: 'Juan',
+      lastName: 'García',
+      secondLastName: 'López',
+    })
+  })
+
+  it('normaliza el paciente incluido en el payload', () => {
+    const user = normalizeStoredUser({
+      token: 'jwt-test',
+      user: {
+        id: 'u1',
+        nombre: 'Ana Pérez',
+        email: 'ana@example.com',
+        patient: { firstName: 'Juan', lastName: 'García' },
+      },
+    })
+    expect(user?.patient).toEqual({
+      firstName: 'Juan',
+      lastName: 'García',
+    })
+  })
+})
+
+describe('ruta inicial según licencia', () => {
+  it('usa /dashboard para licencia básica', () => {
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+    })
+    expect(getDefaultDashboardRoute()).toBe('/dashboard')
+  })
+
+  it('usa /dashboard-premium para licencia premium', () => {
+    setStoredUser({
+      id: 'u1',
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      email: 'ana@example.com',
+      role: 'Nurse',
+      plan: 'premium',
+    })
+    expect(getDefaultDashboardRoute()).toBe('/dashboard-premium')
   })
 })

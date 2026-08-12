@@ -335,6 +335,7 @@ export default function Register() {
 
       if (response?.token) {
         tokenStorage.set(response.token)
+        const patientNameParts = patientName.trim().split(' ').filter(Boolean)
         const sessionUser = normalizeStoredUser(response) ?? {
           id: 'local-user',
           firstName: payload.firstName,
@@ -343,8 +344,20 @@ export default function Register() {
           role: 'Nurse' as const,
           plan: sessionPlan,
         }
-        setStoredUser(sessionUser)
-        navigate('/dashboard', { replace: true })
+        // Persistencia del paciente/tutor en la sesión para que no se pierda
+        // al navegar o actualizar la página.
+        setStoredUser({
+          ...sessionUser,
+          patient: {
+            firstName: patientNameParts[0] ?? '',
+            lastName: patientNameParts.slice(1).join(' ') || '',
+            secondLastName: patientSecondLastName.trim() || undefined,
+          },
+        })
+        navigate(
+          sessionPlan === 'premium' ? '/dashboard-premium' : '/dashboard',
+          { replace: true },
+        )
       } else {
         navigate('/auth/login', { replace: true, state: { registered: true } })
       }

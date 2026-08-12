@@ -21,8 +21,10 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
+  getStoredPatientName,
   getStoredUser,
   isAuthenticated,
+  setStoredPatient,
   setUserPlan,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
@@ -105,7 +107,9 @@ export default function DashboardBasico() {
     getFirstName(currentUser?.firstName) ||
     'Cuidador',
   )
-  const [patientName, setPatientName] = useState<string>('Paciente')
+  const [patientName, setPatientName] = useState<string>(
+    () => getStoredPatientName() || 'Paciente',
+  )
   const [device, setDevice] = useState<Device | null>(null)
   const [latestMeasurement, setLatestMeasurement] = useState<Measurement | null>(null)
 
@@ -123,6 +127,12 @@ export default function DashboardBasico() {
         const fullName = `${profile.firstName} ${profile.lastName}`.trim()
         if (fullName) {
           setPatientName(fullName)
+          // Persiste en la sesión para no perder el nombre al navegar.
+          setStoredPatient({
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            secondLastName: profile.secondLastName ?? undefined,
+          })
         }
       })
       .catch(() => {

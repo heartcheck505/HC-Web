@@ -79,6 +79,14 @@ export interface UserDto {
   role: UserRole
   /** Licencia/plan de suscripción. Ausente se interpreta como `basic`. */
   plan?: UserPlan
+  /** Datos del paciente/tutor registrados, persistidos en la sesión. */
+  patient?: StoredPatient
+}
+
+export interface StoredPatient {
+  firstName: string
+  lastName: string
+  secondLastName?: string
 }
 
 export interface LoginResponse {
