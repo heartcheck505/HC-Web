@@ -7,12 +7,14 @@ import {
   clearSession,
   getBackedUpPatient,
   getDefaultDashboardRoute,
+  getStoredEmergencyContact,
   getStoredPatientDisplayName,
   getStoredPatientName,
   getStoredToken,
   getStoredUser,
   getUserPlan,
   isAuthenticated,
+  normalizePhoneForTel,
   normalizeStoredUser,
   restorePatientProfile,
   setStoredPatient,
@@ -186,6 +188,23 @@ describe('normalizeStoredUser', () => {
     expect(normalizeStoredUser({ token: 'jwt-test' })).toBeNull()
   })
 
+  it('conserva el contacto de emergencia del payload', () => {
+    const user = normalizeStoredUser({
+      token: 'jwt-test',
+      user: {
+        id: 'u5',
+        nombre: 'Ana Pérez',
+        email: 'ana@example.com',
+        emergencyContactName: 'María García',
+        emergencyContactPhone: '+52 55 2222 2222',
+      },
+    })
+    expect(user).toMatchObject({
+      emergencyContactName: 'María García',
+      emergencyContactPhone: '+52 55 2222 2222',
+    })
+  })
+
   it('concede premium solo si el backend lo declara', () => {
     const premium = normalizeStoredUser({
       user: { id: 'u3', nombre: 'Ana', email: 'a@example.com', plan: 'premium' },
@@ -266,9 +285,11 @@ describe('datos de paciente en sesión', () => {
         patient: { firstName: 'Juan', lastName: 'García' },
       },
     })
-    expect(user?.patient).toEqual({
+    expect(user?.patient).toMatchObject({
       firstName: 'Juan',
       lastName: 'García',
+      emergencyContactName: null,
+      emergencyContactPhone: null,
     })
   })
 
@@ -505,9 +526,11 @@ describe('restorePatientProfile', () => {
     const restored = await restorePatientProfile()
     expect(restored).toBe(true)
     expect(getStoredPatientDisplayName()).toBe('Juan García')
-    expect(getBackedUpPatient()).toEqual({
+    expect(getBackedUpPatient()).toMatchObject({
       firstName: 'Juan',
       lastName: 'García',
+      emergencyContactName: null,
+      emergencyContactPhone: null,
     })
   })
 
@@ -548,5 +571,110 @@ describe('restorePatientProfile', () => {
     const restored = await restorePatientProfile()
     expect(restored).toBe(false)
     expect(getStoredPatientDisplayName()).toBe(NO_PATIENT_LABEL)
+  })
+})
+
+describe('getStoredEmergencyContact', () => {
+  const baseUser = {
+    id: 'u1',
+    firstName: 'Ana',
+    lastName: 'Pérez',
+    email: 'ana@example.com',
+    role: 'Nurse' as const,
+  }
+
+  it('devuelve vacío cuando no hay contacto registrado', () => {
+    setStoredUser(baseUser)
+    expect(getStoredEmergencyContact()).toEqual({ name: '', phone: '' })
+  })
+
+  it('prioriza el contacto del paciente sobre el del cuidador', () => {
+    setStoredUser({
+      ...baseUser,
+      emergencyContactName: 'Cuidadora Ana',
+      emergencyContactPhone: '+52 55 1111 1111',
+      patient: {
+        firstName: 'Juan',
+        lastName: 'García',
+        emergencyContactName: 'María García',
+        emergencyContactPhone: '+52 55 2222 2222',
+      },
+    })
+    expect(getStoredEmergencyContact()).toEqual({
+      name: 'María García',
+      phone: '+52 55 2222 2222',
+    })
+  })
+
+  it('toma el contacto del perfil del cuidador si el paciente no lo tiene', () => {
+    setStoredUser({
+      ...baseUser,
+      emergencyContactName: 'Cuidadora Ana',
+      emergencyContactPhone: '+52 55 1111 1111',
+      patient: { firstName: 'Juan', lastName: 'García' },
+    })
+    expect(getStoredEmergencyContact()).toEqual({
+      name: 'Cuidadora Ana',
+      phone: '+52 55 1111 1111',
+    })
+  })
+
+  it('cae al respaldo local cuando la sesión no tiene contacto', () => {
+    setStoredUser(baseUser)
+    backupPatientToLocal('ana@example.com', {
+      firstName: 'Juan',
+      lastName: 'García',
+      emergencyContactName: 'Respaldo',
+      emergencyContactPhone: '+52 55 3333 3333',
+    })
+    expect(getStoredEmergencyContact()).toEqual({
+      name: 'Respaldo',
+      phone: '+52 55 3333 3333',
+    })
+  })
+
+  it('se respalda en localStorage al guardar el paciente con contacto', () => {
+    setStoredUser(baseUser)
+    setStoredPatient({
+      firstName: 'Juan',
+      lastName: 'García',
+      emergencyContactName: 'María García',
+      emergencyContactPhone: '+52 55 2222 2222',
+    })
+    expect(JSON.parse(localStorage.get('patient_data_ana@example.com')!)).toEqual(
+      expect.objectContaining({
+        emergencyContactName: 'María García',
+        emergencyContactPhone: '+52 55 2222 2222',
+      }),
+    )
+  })
+
+  it('conserva el contacto tras cerrar sesión y volver a autenticarse', () => {
+    setStoredUser(baseUser)
+    setStoredPatient({
+      firstName: 'Juan',
+      lastName: 'García',
+      emergencyContactName: 'María García',
+      emergencyContactPhone: '+52 55 2222 2222',
+    })
+    clearSession()
+    setStoredUser(baseUser)
+    expect(getStoredEmergencyContact()).toEqual({
+      name: 'María García',
+      phone: '+52 55 2222 2222',
+    })
+  })
+})
+
+describe('normalizePhoneForTel', () => {
+  it('normaliza teléfonos con separadores', () => {
+    expect(normalizePhoneForTel('+52 55 0000 0000')).toBe('+525500000000')
+    expect(normalizePhoneForTel('+52 (55) 0000-0000')).toBe('+525500000000')
+  })
+
+  it('rechaza teléfonos sin código de país', () => {
+    expect(normalizePhoneForTel('55 0000 0000')).toBeNull()
+    expect(normalizePhoneForTel('')).toBeNull()
+    expect(normalizePhoneForTel('abc')).toBeNull()
   })
 })

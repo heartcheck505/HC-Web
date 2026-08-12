@@ -10,13 +10,20 @@ import {
   Filter,
   Lock,
   MessageCircle,
+  Phone,
   Plus,
   Search,
   Star,
   User,
   X,
 } from 'lucide-react'
-import { API_ENDPOINTS, apiClient, getStoredPatientDisplayName } from '../../api/apiClient'
+import {
+  API_ENDPOINTS,
+  apiClient,
+  getStoredEmergencyContact,
+  getStoredPatientDisplayName,
+  normalizePhoneForTel,
+} from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 
 const trendBars = [40, 65, 50, 75, 55, 80, 60, 70, 45, 68, 52, 74, 48, 72]
@@ -100,6 +107,13 @@ const inputClass =
 export default function RegistroSintomas() {
   const toastTimer = useRef<number | null>(null)
   const patientName = getStoredPatientDisplayName()
+  // Contacto de emergencia persistido en la sesión/respaldo (paciente primero,
+  // perfil del cuidador del registro como alternativa).
+  const emergencyContact = getStoredEmergencyContact()
+  const emergencyTel = normalizePhoneForTel(emergencyContact.phone)
+  const hasEmergencyContact = Boolean(
+    emergencyContact.name.trim() || emergencyContact.phone.trim(),
+  )
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [toast, setToast] = useState<{
@@ -615,6 +629,20 @@ export default function RegistroSintomas() {
               Se contactará de inmediato al número de emergencia configurado
               para {patientName}.
             </p>
+            {hasEmergencyContact && emergencyTel && (
+              <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <p className="font-semibold text-slate-900">
+                  {emergencyContact.name || 'Contacto de emergencia'}
+                </p>
+                <a
+                  href={`tel:${emergencyTel}`}
+                  className="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:underline"
+                >
+                  <Phone className="size-4" aria-hidden="true" />
+                  {emergencyContact.phone}
+                </a>
+              </div>
+            )}
             <div className="mt-6 flex gap-3">
               <button
                 type="button"

@@ -347,12 +347,22 @@ export default function Register() {
         }
         // Persistencia del paciente/tutor en la sesión para que no se pierda
         // al navegar o actualizar la página. `setStoredPatient` además escribe
-        // el respaldo por usuario en `localStorage`.
-        setStoredUser(sessionUser)
+        // el respaldo por usuario en `localStorage`. El contacto de emergencia
+        // se guarda explícitamente tanto en el perfil del cuidador como en el
+        // paciente para que el dashboard lo muestre desde el primer segundo.
+        const storedEmergencyContactName = emergencyName.trim() || null
+        const storedEmergencyContactPhone = emergencyPhone.trim() || null
+        setStoredUser({
+          ...sessionUser,
+          emergencyContactName: storedEmergencyContactName,
+          emergencyContactPhone: storedEmergencyContactPhone,
+        })
         setStoredPatient({
           firstName: patientNameParts[0] ?? '',
           lastName: patientNameParts.slice(1).join(' ') || '',
           secondLastName: patientSecondLastName.trim() || undefined,
+          emergencyContactName: storedEmergencyContactName,
+          emergencyContactPhone: storedEmergencyContactPhone,
         })
         navigate(
           sessionPlan === 'premium' ? '/dashboard-premium' : '/dashboard',

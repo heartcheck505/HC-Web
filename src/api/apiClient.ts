@@ -246,6 +246,44 @@ function getBackedUpPatientName(): string {
 }
 
 /**
+ * Contacto de emergencia del paciente autenticado, con prioridad:
+ * 1. Campos de la sesión (`emergencyContactName`/`emergencyContactPhone`)
+ *    del paciente registrado.
+ * 2. Perfil del usuario/cuidador guardado durante el registro.
+ * 3. Respaldo local (`localStorage`) asociado al email de la cuenta.
+ *
+ * Devuelve cadenas vacías cuando no hay datos registrados.
+ */
+export function getStoredEmergencyContact(): {
+  name: string
+  phone: string
+} {
+  const user = getStoredUser()
+  const patient = user?.patient
+
+  const name =
+    asString(patient?.emergencyContactName) ??
+    asString(user?.emergencyContactName) ??
+    asString(getBackedUpPatient()?.emergencyContactName) ??
+    ''
+  const phone =
+    asString(patient?.emergencyContactPhone) ??
+    asString(user?.emergencyContactPhone) ??
+    asString(getBackedUpPatient()?.emergencyContactPhone) ??
+    ''
+  return { name, phone }
+}
+
+/**
+ * Normaliza un teléfono para su uso en enlaces `tel:`: conserva solo dígitos
+ * y el signo `+` inicial. Devuelve `null` si no parece un teléfono válido.
+ */
+export function normalizePhoneForTel(phone: string): string | null {
+  const compact = phone.trim().replace(/[\s().-]/g, '')
+  return /^\+\d{7,15}$/.test(compact) ? compact : null
+}
+
+/**
  * Restablece el paciente de la sesión tras autenticarse:
  * 1. Intenta `GET /api/patients/me` con el token recién guardado.
  * 2. Si la API no devuelve el perfil (o el backend está inactivo), cae al
@@ -259,7 +297,12 @@ export async function restorePatientProfile(): Promise<boolean> {
     const firstName = profile?.firstName?.trim()
     const lastName = profile?.lastName?.trim()
     if (firstName && lastName) {
-      setStoredPatient({ firstName, lastName })
+      setStoredPatient({
+        firstName,
+        lastName,
+        emergencyContactName: profile.emergencyContactName ?? null,
+        emergencyContactPhone: profile.emergencyContactPhone ?? null,
+      })
       return true
     }
   } catch {
@@ -326,6 +369,10 @@ export function normalizeStoredUser(payload: unknown): UserDto | null {
           firstName: (rawPatient as StoredPatient).firstName,
           lastName: (rawPatient as StoredPatient).lastName,
           secondLastName: (rawPatient as StoredPatient).secondLastName,
+          emergencyContactName:
+            (rawPatient as StoredPatient).emergencyContactName ?? null,
+          emergencyContactPhone:
+            (rawPatient as StoredPatient).emergencyContactPhone ?? null,
         }
       : undefined
 
@@ -364,6 +411,14 @@ export function normalizeStoredUser(payload: unknown): UserDto | null {
         : 'Nurse',
     plan,
     patient,
+    emergencyContactName:
+      asString(nested?.emergencyContactName ?? raw.emergencyContactName) ??
+      patient?.emergencyContactName ??
+      null,
+    emergencyContactPhone:
+      asString(nested?.emergencyContactPhone ?? raw.emergencyContactPhone) ??
+      patient?.emergencyContactPhone ??
+      null,
   }
 }
 

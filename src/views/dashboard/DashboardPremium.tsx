@@ -28,6 +28,7 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
+  getPatientMe,
   getStoredPatientDisplayName,
   getStoredUser,
   isAuthenticated,
@@ -38,7 +39,7 @@ import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import type { Alert, AlertSeverity, AlertStatus, AlertType } from '../../types/alert.types'
 import type { Device } from '../../types/device.types'
 import type { Measurement } from '../../types/measurement.types'
-import type { Patient, PagedResult } from '../../types/patient.types'
+import type { PagedResult } from '../../types/patient.types'
 
 function getFirstName(name: string | null | undefined): string {
   if (!name) {
@@ -292,8 +293,7 @@ export default function DashboardPremium() {
       return
     }
     let cancelled = false
-    apiClient
-      .get<Patient>(API_ENDPOINTS.patients.me)
+    getPatientMe()
       .then((profile) => {
         if (cancelled) {
           return
@@ -301,11 +301,13 @@ export default function DashboardPremium() {
         const fullName = `${profile.firstName} ${profile.lastName}`.trim()
         if (fullName) {
           setPatientName(fullName)
-          // Persiste en la sesión para no perder el nombre al navegar.
+          // Persiste en la sesión y el respaldo local para no perder el
+          // nombre ni el contacto de emergencia al navegar.
           setStoredPatient({
             firstName: profile.firstName,
             lastName: profile.lastName,
-            secondLastName: profile.secondLastName ?? undefined,
+            emergencyContactName: profile.emergencyContactName ?? null,
+            emergencyContactPhone: profile.emergencyContactPhone ?? null,
           })
         }
       })

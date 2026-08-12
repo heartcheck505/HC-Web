@@ -22,15 +22,19 @@ import {
   API_ENDPOINTS,
   NO_PATIENT_LABEL,
   apiClient,
+  getPatientMe,
+  getStoredEmergencyContact,
   getStoredPatientName,
   getStoredUser,
+  normalizePhoneForTel,
+  setStoredPatient,
   shouldUseMockData,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import type { Device } from '../../types/device.types'
 import type { Measurement } from '../../types/measurement.types'
-import type { Patient, PagedResult } from '../../types/patient.types'
+import type { PagedResult } from '../../types/patient.types'
 
 const heartRateBars = [40, 52, 46, 70, 52, 76, 60, 64, 48, 68, 55, 72]
 
@@ -64,7 +68,7 @@ interface ActivityItem {
 }
 
 const FALLBACK_CONTACT: EmergencyContactInfo = {
-  name: 'Sin contacto registrado',
+  name: '',
   relationship: 'Sin información',
   phone: '',
 }
@@ -123,11 +127,6 @@ function formatReportTime(iso: string | null): string {
   })
 }
 
-function normalizePhoneForTel(phone: string): string | null {
-  const compact = phone.trim().replace(/[\s().-]/g, '')
-  return /^\+\d{7,15}$/.test(compact) ? compact : null
-}
-
 function buildActivityList(
   measurements: Measurement[],
   device: DeviceInfo,
@@ -172,6 +171,9 @@ export default function Pacientes() {
     ? `${sessionUser.firstName} ${sessionUser.lastName}`.trim()
     : ''
   const sessionPatientName = getStoredPatientName()
+  // Contacto de emergencia tal como quedó persistido en la sesión/respaldo:
+  // primero el del paciente y, si falta, el del usuario/cuidador del registro.
+  const sessionEmergency = getStoredEmergencyContact()
 
   const [patient, setPatient] = useState<PatientProfile>(() => ({
     fullName: sessionPatientName || NO_PATIENT_LABEL,
@@ -179,9 +181,9 @@ export default function Pacientes() {
     address: FALLBACK_PATIENT.address,
     tutor: sessionPersonName || FALLBACK_PATIENT.tutor,
     contact: {
-      name: sessionPersonName || FALLBACK_CONTACT.name,
+      name: sessionEmergency.name || sessionPersonName || '',
       relationship: FALLBACK_CONTACT.relationship,
-      phone: FALLBACK_CONTACT.phone,
+      phone: sessionEmergency.phone,
     },
   }))
 
@@ -212,7 +214,7 @@ export default function Pacientes() {
       try {
         const [patientResult, deviceResult, measurementResult] =
           await Promise.allSettled([
-            apiClient.get<Patient>(API_ENDPOINTS.patients.me),
+            getPatientMe(),
             apiClient.get<Device[] | PagedResult<Device>>(
               `${API_ENDPOINTS.devices.list}?page=1&pageSize=1`,
             ),
@@ -227,22 +229,38 @@ export default function Pacientes() {
 
         if (patientResult.status === 'fulfilled' && patientResult.value) {
           const apiPatient = patientResult.value
-          const contact = apiPatient.emergencyContacts?.[0]
-          const apiFullName = `${apiPatient.firstName} ${apiPatient.lastName}`.trim()
+          const storedEmergency = getStoredEmergencyContact()
+          const apiFullName =
+            `${apiPatient.firstName} ${apiPatient.lastName}`.trim()
+          // Persiste el perfil (incluido el contacto de emergencia) en la
+          // sesión y el respaldo local para el resto de las vistas.
+          if (apiFullName) {
+            setStoredPatient({
+              firstName: apiPatient.firstName,
+              lastName: apiPatient.lastName,
+              emergencyContactName: apiPatient.emergencyContactName ?? null,
+              emergencyContactPhone:
+                apiPatient.emergencyContactPhone ?? null,
+            })
+          }
           setPatient({
-            fullName:
-              apiFullName || sessionPatientName || NO_PATIENT_LABEL,
-            age: apiPatient.birthDate
-              ? getAge(apiPatient.birthDate)
+            fullName: apiFullName || sessionPatientName || NO_PATIENT_LABEL,
+            age: apiPatient.dateOfBirth
+              ? getAge(apiPatient.dateOfBirth)
               : FALLBACK_PATIENT.age,
             address:
               apiPatient.address?.trim() || FALLBACK_PATIENT.address,
-            tutor: apiPatient.tutor?.trim() || sessionPersonName || FALLBACK_PATIENT.tutor,
+            tutor: sessionPersonName || FALLBACK_PATIENT.tutor,
             contact: {
-              name: contact?.name?.trim() || sessionPersonName || FALLBACK_CONTACT.name,
-              relationship:
-                contact?.relationship?.trim() || FALLBACK_CONTACT.relationship,
-              phone: contact?.phone?.trim() || FALLBACK_CONTACT.phone,
+              name:
+                apiPatient.emergencyContactName?.trim() ||
+                storedEmergency.name ||
+                sessionPersonName ||
+                '',
+              relationship: FALLBACK_CONTACT.relationship,
+              phone:
+                apiPatient.emergencyContactPhone?.trim() ||
+                storedEmergency.phone,
             },
           })
         }
@@ -292,6 +310,16 @@ export default function Pacientes() {
 
   const activity = buildActivityList(measurements, device)
   const emergencyPhone = normalizePhoneForTel(patient.contact.phone)
+  // Solo se muestra el aviso de vacío si no hay nombre NI teléfono válidos.
+  const hasEmergencyContact = Boolean(
+    patient.contact.name.trim() || patient.contact.phone.trim(),
+  )
+  const emergencyInitials = patient.contact.name
+    .split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
 
   const batteryColor =
     device.batteryLevel >= 50
@@ -521,35 +549,40 @@ export default function Pacientes() {
                 <Phone className="size-5 text-emerald-600" aria-hidden="true" />
               </span>
             </div>
-            <div className="mt-4 flex items-center gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                {patient.contact.name
-                  .split(' ')
-                  .map((part) => part[0])
-                  .slice(0, 2)
-                  .join('')
-                  .toUpperCase()}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-900">
-                  {patient.contact.name}
-                </p>
-                <p className="truncate text-sm text-slate-500">
-                  {patient.contact.relationship}
-                </p>
-              </div>
-            </div>
-            <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700">
-              {patient.contact.phone}
-            </p>
-            {emergencyPhone ? (
-              <a
-                href={`tel:${emergencyPhone}`}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-              >
-                <Phone className="size-4" aria-hidden="true" />
-                Llamar ahora
-              </a>
+            {hasEmergencyContact ? (
+              <>
+                <div className="mt-4 flex items-center gap-3">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                    {emergencyInitials || 'EC'}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-slate-900">
+                      {patient.contact.name}
+                    </p>
+                    <p className="truncate text-sm text-slate-500">
+                      {patient.contact.relationship}
+                    </p>
+                  </div>
+                </div>
+                {emergencyPhone ? (
+                  <>
+                    <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700">
+                      {patient.contact.phone}
+                    </p>
+                    <a
+                      href={`tel:${emergencyPhone}`}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                    >
+                      <Phone className="size-4" aria-hidden="true" />
+                      Llamar ahora
+                    </a>
+                  </>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">
+                    No hay un teléfono de emergencia válido.
+                  </p>
+                )}
+              </>
             ) : (
               <p className="mt-4 text-sm text-slate-500">
                 No hay un teléfono de emergencia válido.
@@ -662,6 +695,20 @@ export default function Pacientes() {
               Se contactará de inmediato al número de emergencia configurado
               para {patient.fullName}.
             </p>
+            {hasEmergencyContact && emergencyPhone && (
+              <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <p className="font-semibold text-slate-900">
+                  {patient.contact.name || 'Contacto de emergencia'}
+                </p>
+                <a
+                  href={`tel:${emergencyPhone}`}
+                  className="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:underline"
+                >
+                  <Phone className="size-4" aria-hidden="true" />
+                  {patient.contact.phone}
+                </a>
+              </div>
+            )}
             <div className="mt-6 flex gap-3">
               <button
                 type="button"

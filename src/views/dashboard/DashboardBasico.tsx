@@ -12,6 +12,7 @@ import {
   HeartPulse,
   Lock,
   MessageCircle,
+  Phone,
   Plus,
   Search,
   Star,
@@ -21,9 +22,12 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
+  getPatientMe,
+  getStoredEmergencyContact,
   getStoredPatientDisplayName,
   getStoredUser,
   isAuthenticated,
+  normalizePhoneForTel,
   setStoredPatient,
   setUserPlan,
 } from '../../api/apiClient'
@@ -32,7 +36,7 @@ import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import PlanChangeModal from '../../components/plan/PlanChangeModal'
 import type { Device } from '../../types/device.types'
 import type { Measurement } from '../../types/measurement.types'
-import type { Patient, PagedResult } from '../../types/patient.types'
+import type { PagedResult } from '../../types/patient.types'
 
 function getFirstName(name: string | null | undefined): string {
   if (!name) {
@@ -110,6 +114,13 @@ export default function DashboardBasico() {
   const [patientName, setPatientName] = useState<string>(
     () => getStoredPatientDisplayName(),
   )
+  // Contacto de emergencia persistido en la sesión/respaldo (paciente primero,
+  // perfil del cuidador del registro como alternativa).
+  const emergencyContact = getStoredEmergencyContact()
+  const emergencyTel = normalizePhoneForTel(emergencyContact.phone)
+  const hasEmergencyContact = Boolean(
+    emergencyContact.name.trim() || emergencyContact.phone.trim(),
+  )
   const [device, setDevice] = useState<Device | null>(null)
   const [latestMeasurement, setLatestMeasurement] = useState<Measurement | null>(null)
 
@@ -118,8 +129,7 @@ export default function DashboardBasico() {
       return
     }
     let cancelled = false
-    apiClient
-      .get<Patient>(API_ENDPOINTS.patients.me)
+    getPatientMe()
       .then((profile) => {
         if (cancelled) {
           return
@@ -131,7 +141,8 @@ export default function DashboardBasico() {
           setStoredPatient({
             firstName: profile.firstName,
             lastName: profile.lastName,
-            secondLastName: profile.secondLastName ?? undefined,
+            emergencyContactName: profile.emergencyContactName ?? null,
+            emergencyContactPhone: profile.emergencyContactPhone ?? null,
           })
         }
       })
@@ -517,6 +528,20 @@ export default function DashboardBasico() {
               Se contactará de inmediato al número de emergencia configurado
               para {patientName}.
             </p>
+            {hasEmergencyContact && emergencyTel && (
+              <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <p className="font-semibold text-slate-900">
+                  {emergencyContact.name || 'Contacto de emergencia'}
+                </p>
+                <a
+                  href={`tel:${emergencyTel}`}
+                  className="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:underline"
+                >
+                  <Phone className="size-4" aria-hidden="true" />
+                  {emergencyContact.phone}
+                </a>
+              </div>
+            )}
             <div className="mt-6 flex gap-3">
               <button
                 type="button"

@@ -81,12 +81,17 @@ export interface UserDto {
   plan?: UserPlan
   /** Datos del paciente/tutor registrados, persistidos en la sesión. */
   patient?: StoredPatient
+  /** Contacto de emergencia del perfil del cuidador/registro. */
+  emergencyContactName?: string | null
+  emergencyContactPhone?: string | null
 }
 
 export interface StoredPatient {
   firstName: string
   lastName: string
   secondLastName?: string
+  emergencyContactName?: string | null
+  emergencyContactPhone?: string | null
 }
 
 export interface LoginResponse {
