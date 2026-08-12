@@ -1,7 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getUserPlan, isAuthenticated, setUserPlan } from '../api/apiClient'
+import {
+  getCurrentUserPlan,
+  getPlans,
+  getUserPlan,
+  isAuthenticated,
+  setUserPlan,
+  subscribeToPlan,
+} from '../api/apiClient'
 import PlanChangeModal from '../components/plan/PlanChangeModal'
+import type { Plan, UserPlanSubscription } from '../types/plan.types'
 import type { UserPlan } from '../types/auth.types'
 
 type FeatureIcon = 'check' | 'cross' | 'star'
@@ -191,6 +199,7 @@ function ComparisonIcon({ value }: { value: string | null }) {
 
 interface PlanChangeState {
   mode: 'upgrade' | 'downgrade'
+  planId: string
   planName: string
   price: string
   userPlan: UserPlan
@@ -200,17 +209,109 @@ function planIdToUserPlan(planId: string): UserPlan {
   return planId === 'basico' ? 'basic' : 'premium'
 }
 
+/**
+ * Resuelve el `planId` de la API de producción correspondiente al plan local
+ * (`basico`/`premium`/`gold`). Coincide primero por id exacto y luego por
+ * nombre (o `keywords`) del catálogo devuelto por `GET /api/plans`.
+ */
+function resolveBackendPlanId(uiPlanId: string, plans: Plan[]): string | null {
+  const keywords =
+    uiPlanId === 'basico'
+      ? ['basico', 'basic', 'básico']
+      : uiPlanId === 'premium'
+        ? ['premium']
+        : ['gold']
+
+  const matchesKeyword = (value: string | null | undefined): boolean =>
+    keywords.some((keyword) => (value ?? '').toLowerCase().includes(keyword))
+
+  const byId = plans.find(
+    (plan) => plan.id.toLowerCase() === uiPlanId.toLowerCase(),
+  )
+  if (byId) {
+    return byId.id
+  }
+  const byName = plans.find(
+    (plan) =>
+      matchesKeyword(plan.name) ||
+      (plan.keywords ?? []).some((keyword) => matchesKeyword(keyword)),
+  )
+  return byName?.id ?? null
+}
+
+/**
+ * Deriva la licencia local (`basic`/`premium`) desde la suscripción devuelta
+ * por `GET /api/user-plans/me`. Si el backend no aporta nombre de plan, se
+ * conserva la elección del usuario.
+ */
+function resolveSessionPlan(
+  subscription: UserPlanSubscription | null,
+  fallback: UserPlan,
+): UserPlan {
+  const planName = (
+    subscription?.planName ??
+    subscription?.plan?.name ??
+    ''
+  ).toLowerCase()
+  if (planName.includes('gold') || planName.includes('premium')) {
+    return 'premium'
+  }
+  if (
+    planName.includes('básico') ||
+    planName.includes('basico') ||
+    planName.includes('basic')
+  ) {
+    return 'basic'
+  }
+  return fallback
+}
+
 export default function Planes() {
   const navigate = useNavigate()
   const authenticated = isAuthenticated()
   const currentPlan = getUserPlan()
   const [changeModal, setChangeModal] = useState<PlanChangeState | null>(null)
+  const [backendPlans, setBackendPlans] = useState<Plan[]>([])
 
-  const handlePlanConfirmed = (): void => {
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      return
+    }
+    let cancelled = false
+    getPlans()
+      .then((plans) => {
+        if (!cancelled) {
+          setBackendPlans(Array.isArray(plans) ? plans : [])
+        }
+      })
+      .catch(() => {
+        // Backend inactivo: el flujo de cambio de plan persiste solo en local.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handlePlanConfirmed = async (): Promise<void> => {
     if (!changeModal) {
       return
     }
-    setUserPlan(changeModal.userPlan)
+    const backendPlanId = resolveBackendPlanId(
+      changeModal.planId,
+      backendPlans,
+    )
+    if (isAuthenticated() && backendPlanId) {
+      try {
+        await subscribeToPlan(backendPlanId)
+        const subscription = await getCurrentUserPlan()
+        setUserPlan(resolveSessionPlan(subscription, changeModal.userPlan))
+      } catch {
+        // Backend inactivo o sin autorización: se persiste la licencia en local.
+        setUserPlan(changeModal.userPlan)
+      }
+    } else {
+      setUserPlan(changeModal.userPlan)
+    }
     setChangeModal(null)
     navigate(
       changeModal.userPlan === 'premium' ? '/dashboard-premium' : '/dashboard',
@@ -247,6 +348,7 @@ export default function Planes() {
               onClick={() =>
                 setChangeModal({
                   mode: isUpgradeTarget ? 'upgrade' : 'downgrade',
+                  planId: plan.planId,
                   planName: plan.name,
                   price: plan.price,
                   userPlan: targetPlan,

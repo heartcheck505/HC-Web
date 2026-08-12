@@ -27,6 +27,21 @@ import type {
   UserDto,
   UserPlan,
 } from '../types/auth.types'
+import type {
+  Device,
+  DeviceRegistrationRequest,
+} from '../types/device.types'
+import type {
+  MeasurementHistoryItem,
+  MeasurementSubmission,
+} from '../types/measurement.types'
+import type { AppNotification } from '../types/notification.types'
+import type {
+  PatientMe,
+  PatientMeRequest,
+} from '../types/patient.types'
+import type { Plan, UserPlanSubscription } from '../types/plan.types'
+import type { DailyStatistic } from '../types/statistics.types'
 
 export const API_BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL || '/api'
@@ -397,6 +412,111 @@ export const apiClient = {
   },
 }
 
+/**
+ * Datos del paciente que alimentan `GET/PUT /api/patients/me`. La UI puede
+ * manejar `secondLastName` por separado; al construir el payload los apellidos
+ * se concatenan y solo `firstName`/`lastName` viajan al backend.
+ */
+export interface PatientMeUpdateInput {
+  firstName: string
+  lastName: string
+  secondLastName?: string | null
+  phone?: PatientMeRequest['phone']
+  dateOfBirth?: PatientMeRequest['dateOfBirth']
+  gender?: PatientMeRequest['gender']
+  bloodType?: PatientMeRequest['bloodType']
+  emergencyContactName?: PatientMeRequest['emergencyContactName']
+  emergencyContactPhone?: PatientMeRequest['emergencyContactPhone']
+  address?: PatientMeRequest['address']
+}
+
+export function buildPatientMePayload(
+  input: PatientMeUpdateInput,
+): PatientMeRequest {
+  const lastNameParts = [input.lastName, input.secondLastName].filter(
+    (part): part is string => typeof part === 'string' && part.trim() !== '',
+  )
+  return {
+    firstName: input.firstName.trim(),
+    lastName: lastNameParts.join(' ').trim(),
+    phone: input.phone ?? null,
+    dateOfBirth: input.dateOfBirth ?? null,
+    gender: input.gender ?? null,
+    bloodType: input.bloodType ?? null,
+    emergencyContactName: input.emergencyContactName ?? null,
+    emergencyContactPhone: input.emergencyContactPhone ?? null,
+    address: input.address ?? null,
+  }
+}
+
+/**
+ * Funciones tipadas alineadas con la especificación de la API de producción.
+ * Todas heredan el header `Authorization: Bearer <token>` de `request()`.
+ */
+
+export async function getPatientMe(): Promise<PatientMe> {
+  return apiClient.get<PatientMe>(API_ENDPOINTS.patients.me)
+}
+
+export async function updatePatientMe(
+  input: PatientMeUpdateInput,
+): Promise<PatientMe> {
+  return apiClient.put<PatientMe>(
+    API_ENDPOINTS.patients.me,
+    buildPatientMePayload(input),
+  )
+}
+
+export async function getPlans(): Promise<Plan[]> {
+  return apiClient.get<Plan[]>(API_ENDPOINTS.plans.list)
+}
+
+export async function subscribeToPlan(planId: string): Promise<unknown> {
+  return apiClient.post<unknown>(API_ENDPOINTS.plans.userPlans, { planId })
+}
+
+export async function getCurrentUserPlan(): Promise<UserPlanSubscription | null> {
+  return apiClient.get<UserPlanSubscription | null>(
+    API_ENDPOINTS.plans.current,
+  )
+}
+
+export async function getDevices(): Promise<Device[]> {
+  return apiClient.get<Device[]>(API_ENDPOINTS.devices.list)
+}
+
+export async function registerDevice(
+  payload: DeviceRegistrationRequest,
+): Promise<Device> {
+  return apiClient.post<Device>(API_ENDPOINTS.devices.register, payload)
+}
+
+export async function createMeasurement(
+  payload: MeasurementSubmission,
+): Promise<unknown> {
+  return apiClient.post<unknown>(API_ENDPOINTS.measurements.create, payload)
+}
+
+export async function getMeasurementHistory(): Promise<MeasurementHistoryItem[]> {
+  return apiClient.get<MeasurementHistoryItem[]>(
+    API_ENDPOINTS.measurements.history,
+  )
+}
+
+export async function getNotifications(): Promise<AppNotification[]> {
+  return apiClient.get<AppNotification[]>(API_ENDPOINTS.notifications.list)
+}
+
+export async function getDailyStatistics(
+  from: string,
+  to: string,
+): Promise<DailyStatistic[]> {
+  const query = new URLSearchParams({ from, to }).toString()
+  return apiClient.get<DailyStatistic[]>(
+    `${API_ENDPOINTS.statistics.daily}?${query}`,
+  )
+}
+
 export const tokenStorage = {
   get: getStoredToken,
   set: setStoredToken,
@@ -416,6 +536,11 @@ export const API_ENDPOINTS = {
     update: (id: string) => `/patients/${id}`,
     remove: (id: string) => `/patients/${id}`,
   },
+  plans: {
+    list: '/plans',
+    userPlans: '/user-plans',
+    current: '/user-plans/me',
+  },
   devices: {
     list: '/devices',
     detail: (id: string) => `/devices/${id}`,
@@ -425,6 +550,8 @@ export const API_ENDPOINTS = {
   },
   measurements: {
     list: '/measurements',
+    create: '/measurements',
+    history: '/measurements/history',
     detail: (id: string) => `/measurements/${id}`,
     summary: '/measurements/summary',
   },
@@ -437,5 +564,11 @@ export const API_ENDPOINTS = {
     detail: (id: string) => `/alerts/${id}`,
     ack: (id: string) => `/alerts/${id}/ack`,
     resolve: (id: string) => `/alerts/${id}/resolve`,
+  },
+  notifications: {
+    list: '/notifications',
+  },
+  statistics: {
+    daily: '/statistics/daily',
   },
 } as const

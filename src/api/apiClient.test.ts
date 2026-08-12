@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  API_ENDPOINTS,
   NO_PATIENT_LABEL,
+  buildPatientMePayload,
   clearSession,
   getDefaultDashboardRoute,
   getStoredPatientDisplayName,
@@ -292,5 +294,89 @@ describe('ruta inicial según licencia', () => {
       plan: 'premium',
     })
     expect(getDefaultDashboardRoute()).toBe('/dashboard-premium')
+  })
+})
+
+describe('buildPatientMePayload', () => {
+  it('envía solo los campos exactos de GET/PUT /api/patients/me', () => {
+    const payload = buildPatientMePayload({
+      firstName: 'Juan',
+      lastName: 'García',
+      phone: '555-1234',
+      dateOfBirth: '1980-05-01',
+      gender: 'Male',
+      bloodType: 'O+',
+      emergencyContactName: 'María García',
+      emergencyContactPhone: '555-5678',
+      address: 'Calle 1 #23',
+    })
+    expect(payload).toEqual({
+      firstName: 'Juan',
+      lastName: 'García',
+      phone: '555-1234',
+      dateOfBirth: '1980-05-01',
+      gender: 'Male',
+      bloodType: 'O+',
+      emergencyContactName: 'María García',
+      emergencyContactPhone: '555-5678',
+      address: 'Calle 1 #23',
+    })
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'address',
+        'bloodType',
+        'dateOfBirth',
+        'emergencyContactName',
+        'emergencyContactPhone',
+        'firstName',
+        'gender',
+        'lastName',
+        'phone',
+      ].sort(),
+    )
+  })
+
+  it('concatena secondLastName en lastName sin enviarlo al backend', () => {
+    const payload = buildPatientMePayload({
+      firstName: 'Juan',
+      lastName: 'García',
+      secondLastName: 'López',
+    })
+    expect(payload.lastName).toBe('García López')
+    expect('secondLastName' in payload).toBe(false)
+  })
+
+  it('normaliza los campos opcionales a null', () => {
+    const payload = buildPatientMePayload({
+      firstName: 'Ana',
+      lastName: 'Pérez',
+    })
+    expect(payload).toMatchObject({
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      phone: null,
+      dateOfBirth: null,
+      gender: null,
+      bloodType: null,
+      emergencyContactName: null,
+      emergencyContactPhone: null,
+      address: null,
+    })
+  })
+})
+
+describe('endpoints de producción', () => {
+  it('mapa los endpoints de planes según la especificación', () => {
+    expect(API_ENDPOINTS.plans.list).toBe('/plans')
+    expect(API_ENDPOINTS.plans.userPlans).toBe('/user-plans')
+    expect(API_ENDPOINTS.plans.current).toBe('/user-plans/me')
+  })
+
+  it('mapa los endpoints de mediciones, dispositivos, notificaciones y estadísticas', () => {
+    expect(API_ENDPOINTS.measurements.create).toBe('/measurements')
+    expect(API_ENDPOINTS.measurements.history).toBe('/measurements/history')
+    expect(API_ENDPOINTS.devices.register).toBe('/devices')
+    expect(API_ENDPOINTS.notifications.list).toBe('/notifications')
+    expect(API_ENDPOINTS.statistics.daily).toBe('/statistics/daily')
   })
 })

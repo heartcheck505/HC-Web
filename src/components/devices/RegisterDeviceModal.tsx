@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { API_ENDPOINTS, apiClient } from '../../api/apiClient'
+import { registerDevice } from '../../api/apiClient'
 import { Watch, X } from 'lucide-react'
 import type { Device } from '../../types/device.types'
 
@@ -22,8 +22,6 @@ export default function RegisterDeviceModal({
 }: RegisterDeviceModalProps) {
   const [deviceIdentifier, setDeviceIdentifier] = useState('')
   const [deviceModel, setDeviceModel] = useState('')
-  const [firmwareVersion, setFirmwareVersion] = useState('5.0.1')
-  const [batteryLevel, setBatteryLevel] = useState(100)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,8 +32,6 @@ export default function RegisterDeviceModal({
   const resetForm = (): void => {
     setDeviceIdentifier('')
     setDeviceModel('')
-    setFirmwareVersion('5.0.1')
-    setBatteryLevel(100)
     setError(null)
   }
 
@@ -60,11 +56,9 @@ export default function RegisterDeviceModal({
     setSubmitting(true)
     setError(null)
     try {
-      const device = await apiClient.post<Device>(API_ENDPOINTS.devices.register, {
+      const device = await registerDevice({
         deviceIdentifier: deviceIdentifier.trim(),
-        deviceModel,
-        firmwareVersion: firmwareVersion.trim() || '5.0.1',
-        batteryLevel: Number(batteryLevel),
+        name: deviceModel,
       })
       resetForm()
       onClose()
@@ -148,35 +142,6 @@ export default function RegisterDeviceModal({
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="firmware-version" className="block text-sm font-medium text-slate-700">
-                Versión de Firmware
-              </label>
-              <input
-                id="firmware-version"
-                type="text"
-                value={firmwareVersion}
-                onChange={(event) => setFirmwareVersion(event.target.value)}
-                className={`mt-1.5 ${inputClass}`}
-              />
-            </div>
-            <div>
-              <label htmlFor="battery-level" className="block text-sm font-medium text-slate-700">
-                Batería inicial (%)
-              </label>
-              <input
-                id="battery-level"
-                type="number"
-                min={0}
-                max={100}
-                value={batteryLevel}
-                onChange={(event) => setBatteryLevel(Number(event.target.value))}
-                className={`mt-1.5 ${inputClass}`}
-              />
-            </div>
           </div>
 
           {error && (

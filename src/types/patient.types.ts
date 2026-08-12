@@ -1,9 +1,34 @@
+import type { BloodGroup } from './auth.types'
+
 export type Gender = 'Male' | 'Female' | 'Other'
 
 export interface EmergencyContact {
   name: string
   relationship: string
   phone: string
+}
+
+/**
+ * Perfil del paciente autenticado tal como lo espera la API de producción en
+ * `GET/PUT /api/patients/me`. Los apellidos se envían concatenados en
+ * `lastName`; el frontend nunca envía `secondLastName`.
+ */
+export interface PatientMeRequest {
+  firstName: string
+  lastName: string
+  phone?: string | null
+  dateOfBirth?: string | null
+  gender?: Gender | null
+  bloodType?: BloodGroup | null
+  emergencyContactName?: string | null
+  emergencyContactPhone?: string | null
+  address?: string | null
+}
+
+export interface PatientMe extends PatientMeRequest {
+  id?: string | null
+  email?: string | null
+  createdAt?: string | null
 }
 
 export interface Patient {

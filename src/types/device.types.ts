@@ -14,9 +14,7 @@ export interface Device {
 
 export interface DeviceRegistrationRequest {
   deviceIdentifier: string
-  deviceModel: string
-  firmwareVersion?: string
-  batteryLevel?: number
+  name: string
 }
 
 export interface DeviceUpdateRequest {

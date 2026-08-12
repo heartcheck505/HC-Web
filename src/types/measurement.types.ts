@@ -20,6 +20,32 @@ export interface MeasurementQuery {
   pageSize?: number
 }
 
+/**
+ * Medición enviada a `POST /api/measurements` según la especificación de
+ * producción: `{ deviceId, bpm, quality, context, notes }`.
+ */
+export interface MeasurementSubmission {
+  deviceId: string
+  bpm: number
+  quality?: string | null
+  context?: string | null
+  notes?: string | null
+}
+
+/**
+ * Elemento del historial devuelto por `GET /api/measurements/history`.
+ * Los campos son defensivos: la API puede devolver campos adicionales.
+ */
+export interface MeasurementHistoryItem {
+  id?: string | null
+  deviceId?: string | null
+  bpm?: number | null
+  quality?: string | null
+  context?: string | null
+  notes?: string | null
+  recordedAt?: string | null
+}
+
 export interface MeasurementSummary {
   latestHeartRate: number | null
   averageHeartRate: number | null
