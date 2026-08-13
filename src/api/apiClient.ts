@@ -5,15 +5,15 @@
  * - El token JWT jamás se compromete en el código; se lee desde
  *   `sessionStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
- * - La URL base apunta directamente al backend de producción:
- *   `http://heartcheckapi.runasp.net/api` por defecto. Se resuelve con esta
- *   prioridad: `VITE_API_BASE_URL_HTTPS` (para forzar HTTPS desde Render y
- *   evitar Mixed Content) → `VITE_API_BASE_URL` → default HTTP. El CSP de
- *   `index.html` ya admite ambos esquemas (`connect-src` con http/https y
- *   comodines `*.runasp.net`), por lo que ninguna petición se bloquea.
- *   Nunca se usa una ruta relativa `/api` como base: todas las peticiones
- *   salen a la URL absoluta del backend (p. ej.
- *   `GET http://heartcheckapi.runasp.net/api/patients/me`), evitando 404
+ * - La URL base apunta directamente al backend de producción SIEMPRE en
+ *   HTTPS: `https://heartcheckapi.runasp.net/api` por defecto, para evitar
+ *   Mixed Content (petición HTTP insegura desde un sitio HTTPS). Se resuelve
+ *   con esta prioridad: `VITE_API_BASE_URL_HTTPS` → `VITE_API_BASE_URL` →
+ *   default HTTPS. El CSP de `index.html` admite ambos esquemas
+ *   (`connect-src` con https/http y comodines `*.runasp.net`), por lo que
+ *   ninguna petición se bloquea. Nunca se usa una ruta relativa `/api` como
+ *   base: todas las peticiones salen a la URL absoluta del backend (p. ej.
+ *   `GET https://heartcheckapi.runasp.net/api/patients/me`), evitando 404
  *   cuando el frontend se sirve desde un servidor distinto al de la API
  *   (Render, Netlify, etc.). En local se puede conservar el proxy de
  *   `vite.config.ts` fijando `VITE_API_BASE_URL=/api`.
@@ -55,7 +55,7 @@ import type { DailyStatistic } from '../types/statistics.types'
 export const API_BASE_URL: string = (
   import.meta.env.VITE_API_BASE_URL_HTTPS ||
   import.meta.env.VITE_API_BASE_URL ||
-  'http://heartcheckapi.runasp.net/api'
+  'https://heartcheckapi.runasp.net/api'
 ).replace(/\/+$/, '')
 
 const TOKEN_STORAGE_KEY = 'heartcheck.token'

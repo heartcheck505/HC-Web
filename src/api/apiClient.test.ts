@@ -1127,9 +1127,10 @@ describe('login: POST /auth/login', () => {
       platform: 'Web',
     })
     expect(capturedUrl).toBe(`${API_BASE_URL}/auth/login`)
-    expect(capturedUrl.startsWith('http://heartcheckapi.runasp.net/api')).toBe(
+    expect(capturedUrl.startsWith('https://heartcheckapi.runasp.net/api')).toBe(
       true,
     )
+    expect(capturedUrl.startsWith('http://')).toBe(false)
     expect(capturedInit?.method).toBe('POST')
     const headers = capturedInit?.headers as Headers
     expect(headers.get('Content-Type')).toBe('application/json')
