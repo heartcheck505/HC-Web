@@ -3,12 +3,9 @@ import type { ReactNode } from 'react'
 import {
   Activity,
   ArrowUpRight,
-  Battery,
   Bell,
-  Cable,
   CalendarDays,
   CheckCircle2,
-  Clock,
   Cross,
   Droplets,
   FileText,
@@ -21,8 +18,6 @@ import {
   Search,
   Sparkles,
   Star,
-  Watch,
-  Wifi,
   X,
 } from 'lucide-react'
 import {
@@ -36,10 +31,8 @@ import {
   setStoredPatient,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
-import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import HeartRateTrendChart from '../../components/charts/HeartRateTrendChart'
 import type { Alert, AlertSeverity, AlertStatus, AlertType } from '../../types/alert.types'
-import type { Device } from '../../types/device.types'
 import type { MeasurementReading } from '../../types/measurement.types'
 import type { PagedResult } from '../../types/patient.types'
 
@@ -254,9 +247,8 @@ export default function DashboardPremium() {
     () => getStoredPatientDisplayName(),
   )
 
-  // Indicadores clave: parten en 0 / vacíos / desconectados hasta recibir
-  // telemetría real de la API o del reloj.
-  const [device, setDevice] = useState<Device | null>(null)
+  // Indicadores clave: parten en 0 / vacíos hasta recibir telemetría real de
+  // la API.
   const [latestMeasurement, setLatestMeasurement] =
     useState<MeasurementReading | null>(null)
   const [measurementReadings, setMeasurementReadings] = useState<
@@ -276,7 +268,6 @@ export default function DashboardPremium() {
   >('Todos')
   const [dayRange, setDayRange] = useState<'7' | '30' | '90'>('30')
 
-  const [deviceModalOpen, setDeviceModalOpen] = useState(false)
   const [detailEvent, setDetailEvent] = useState<Alert | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -331,9 +322,6 @@ export default function DashboardPremium() {
       Array.isArray(payload) ? payload : payload.items
 
     Promise.allSettled([
-      apiClient.get<Device[] | PagedResult<Device>>(
-        `${API_ENDPOINTS.devices.list}?page=1&pageSize=1`,
-      ),
       apiClient.get<MeasurementReading[] | PagedResult<MeasurementReading>>(
         `${API_ENDPOINTS.measurements.list}?page=1&pageSize=1`,
       ),
@@ -342,35 +330,30 @@ export default function DashboardPremium() {
         `${API_ENDPOINTS.alerts.list}?pageSize=30`,
       ),
     ])
-      .then(
-        ([deviceResult, measurementResult, readingsResult, alertsResult]) => {
-          if (cancelled) {
-            return
-          }
-          if (deviceResult.status === 'fulfilled') {
-            setDevice(toArray(deviceResult.value)[0] ?? null)
-          }
-          if (measurementResult.status === 'fulfilled') {
-            setLatestMeasurement(toArray(measurementResult.value)[0] ?? null)
-          }
-          if (readingsResult.status === 'fulfilled') {
-            // Lecturas reales de GET /api/measurements para la gráfica.
-            setMeasurementReadings(readingsResult.value)
-          }
-          if (alertsResult.status === 'fulfilled') {
-            setEvents(toArray(alertsResult.value))
-          }
-          // VFC, sueño, puntaje de estabilidad y análisis predictivo: el
-          // backend aún no los expone; se mantienen en espera (0 / '--' /
-          // vacíos) hasta disponer del servicio.
-          setHrv(0)
-          setSleepScore(0)
-          setSleepTimeMinutes(0)
-          setSleepPhases([])
-          setStabilityScore(null)
-          setAiAnalysis(null)
-        },
-      )
+      .then(([measurementResult, readingsResult, alertsResult]) => {
+        if (cancelled) {
+          return
+        }
+        if (measurementResult.status === 'fulfilled') {
+          setLatestMeasurement(toArray(measurementResult.value)[0] ?? null)
+        }
+        if (readingsResult.status === 'fulfilled') {
+          // Lecturas reales de GET /api/measurements para la gráfica.
+          setMeasurementReadings(readingsResult.value)
+        }
+        if (alertsResult.status === 'fulfilled') {
+          setEvents(toArray(alertsResult.value))
+        }
+        // VFC, sueño, puntaje de estabilidad y análisis predictivo: el
+        // backend aún no los expone; se mantienen en espera (0 / '--' /
+        // vacíos) hasta disponer del servicio.
+        setHrv(0)
+        setSleepScore(0)
+        setSleepTimeMinutes(0)
+        setSleepPhases([])
+        setStabilityScore(null)
+        setAiAnalysis(null)
+      })
       .catch(() => {
         return
       })
@@ -506,8 +489,7 @@ export default function DashboardPremium() {
                       Análisis Predictivo en espera
                     </p>
                     <p className="text-xs text-blue-700/80">
-                      Conecta tu dispositivo y espera la siguiente
-                      sincronización para generar la predicción.
+                      Esperando telemetría para generar la predicción.
                     </p>
                   </div>
                 </div>
@@ -703,7 +685,7 @@ export default function DashboardPremium() {
         <section className="mt-8 grid gap-6 xl:grid-cols-3">
           <div
             id="eventos-clinicos"
-            className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2"
+            className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-3"
           >
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -820,127 +802,8 @@ export default function DashboardPremium() {
               </div>
             )}
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">
-                Dispositivos Vinculados
-              </h2>
-              <button
-                type="button"
-                onClick={() => setDeviceModalOpen(true)}
-                className="flex items-center gap-1 text-sm font-semibold text-blue-600 transition-colors hover:underline"
-              >
-                Administrar
-                <ArrowUpRight className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            {device ? (
-              <div className="mt-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-50">
-                      <Watch className="size-6 text-blue-600" aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-900">
-                        {device.model}
-                      </p>
-                      <p className="truncate text-xs text-slate-500">
-                        {device.serialNumber}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      device.lastSyncAt
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    <span
-                      className={`size-1.5 rounded-full ${
-                        device.lastSyncAt ? 'bg-emerald-500' : 'bg-slate-400'
-                      }`}
-                      aria-hidden="true"
-                    />
-                    {device.lastSyncAt ? 'Conectado' : 'Desconectado'}
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2 text-slate-600">
-                      <Battery className="size-4" aria-hidden="true" />
-                      Batería
-                    </span>
-                    <span className="font-semibold text-slate-700">
-                      {device.batteryLevel}%
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-blue-500 transition-[width] duration-500"
-                      style={{ width: `${Math.min(100, Math.max(0, device.batteryLevel))}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 text-sm text-slate-600">
-                  {device.lastSyncAt ? (
-                    <Wifi className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
-                  ) : (
-                    <Cable className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-                  )}
-                  <span>
-                    Última sincronización:{' '}
-                    {device.lastSyncAt ? formatEventTime(device.lastSyncAt) : '—'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2.5 text-sm text-slate-600">
-                  <Clock className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
-                  <span>
-                    {device.status === 'Active'
-                      ? 'Telemetría activa y enviando datos.'
-                      : 'Dispositivo registrado, pendiente de activación.'}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-                <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-white shadow-sm">
-                  <Watch className="size-6 text-slate-400" aria-hidden="true" />
-                </span>
-                <p className="mt-3 font-semibold text-slate-700">
-                  Sin dispositivo vinculado
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Vincula tu reloj inteligente para comenzar a recibir
-                  telemetría en tiempo real.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setDeviceModalOpen(true)}
-                  className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-                >
-                  Vincular ahora
-                </button>
-              </div>
-            )}
-          </div>
         </section>
       </main>
-
-      <RegisterDeviceModal
-        open={deviceModalOpen}
-        onClose={() => setDeviceModalOpen(false)}
-        onRegistered={() => {
-          setDeviceModalOpen(false)
-          setRefreshKey((value) => value + 1)
-          showToast('Dispositivo Wear OS vinculado correctamente.')
-        }}
-      />
 
       {detailEvent && (
         <div

@@ -2,12 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
-  Battery,
   Bell,
-  CheckCircle2,
   ChevronRight,
   ClipboardList,
-  Clock,
   Heart,
   Lock,
   MessageCircle,
@@ -15,7 +12,6 @@ import {
   Plus,
   Search,
   Star,
-  Watch,
   X,
 } from 'lucide-react'
 import {
@@ -32,7 +28,6 @@ import {
   setUserPlan,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
-import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import PlanChangeModal from '../../components/plan/PlanChangeModal'
 import HeartRateTrendChart from '../../components/charts/HeartRateTrendChart'
 import {
@@ -40,7 +35,6 @@ import {
   limitLatestReadings,
   normalLabel,
 } from '../../components/charts/historyLimit'
-import type { Device } from '../../types/device.types'
 import type { MeasurementReading } from '../../types/measurement.types'
 import type { PagedResult } from '../../types/patient.types'
 
@@ -120,7 +114,6 @@ export default function DashboardBasico() {
   const hasEmergencyContact = Boolean(
     emergencyContact.name.trim() || emergencyContact.phone.trim(),
   )
-  const [device, setDevice] = useState<Device | null>(null)
   const [latestMeasurement, setLatestMeasurement] =
     useState<MeasurementReading | null>(null)
   const [inicioReadings, setInicioReadings] = useState<MeasurementReading[]>([])
@@ -166,19 +159,13 @@ export default function DashboardBasico() {
       Array.isArray(payload) ? payload : payload.items
 
     Promise.allSettled([
-      apiClient.get<Device[] | PagedResult<Device>>(
-        `${API_ENDPOINTS.devices.list}?page=1&pageSize=1`,
-      ),
       apiClient.get<MeasurementReading[] | PagedResult<MeasurementReading>>(
         `${API_ENDPOINTS.measurements.list}?page=1&pageSize=1`,
       ),
       getMeasurements(),
-    ]).then(([deviceResult, measurementResult, readingsResult]) => {
+    ]).then(([measurementResult, readingsResult]) => {
       if (cancelled) {
         return
-      }
-      if (deviceResult.status === 'fulfilled') {
-        setDevice(toArray(deviceResult.value)[0] ?? null)
       }
       if (measurementResult.status === 'fulfilled') {
         setLatestMeasurement(toArray(measurementResult.value)[0] ?? null)
@@ -225,7 +212,6 @@ export default function DashboardBasico() {
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [symptomOpen, setSymptomOpen] = useState(false)
-  const [deviceModalOpen, setDeviceModalOpen] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState<boolean>(() => {
     const state = location.state as { upgradeRequired?: boolean } | null
     return Boolean(state?.upgradeRequired)
@@ -329,7 +315,7 @@ export default function DashboardBasico() {
           </Link>
         </section>
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-3" aria-label="Métricas">
+        <section className="mt-8 grid gap-6 lg:grid-cols-2" aria-label="Métricas">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -347,44 +333,9 @@ export default function DashboardBasico() {
             </div>
             <p className="mt-4 text-sm text-slate-500">
               {latestMeasurement
-                ? 'Última lectura recibida del dispositivo.'
-                : 'Conecta un dispositivo para recibir mediciones.'}
+                ? 'Última lectura recibida del monitor.'
+                : 'Sin telemetría disponible todavía.'}
             </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Conexión del Dispositivo
-              </p>
-              <span className="flex size-9 items-center justify-center rounded-full bg-sky-100">
-                <Watch className="size-5 text-sky-600" aria-hidden="true" />
-              </span>
-            </div>
-            <p className="mt-4 text-xl font-bold text-slate-900">
-              {device?.model ?? 'Sin dispositivo conectado'}
-            </p>
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Señal</span>
-                <span className="font-semibold text-slate-500">
-                  {device?.lastSyncAt ? 'Conectado' : 'Sin señal'}
-                </span>
-              </div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-slate-300"
-                  style={{ width: device?.lastSyncAt ? '100%' : '0%' }}
-                />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-sm text-slate-500">Batería</span>
-              <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-500">
-                <Battery className="size-4" aria-hidden="true" />
-                <span>{device?.batteryLevel ?? 0}%</span>
-              </span>
-            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -444,7 +395,7 @@ export default function DashboardBasico() {
                   day={23}
                   tone="amber"
                   emoji="😐"
-                  text="Conecta un dispositivo para iniciar el seguimiento."
+                  text="Sin telemetría disponible en el período."
                 />
               </div>
 
@@ -532,7 +483,7 @@ export default function DashboardBasico() {
           </div>
 
           {/* Tendencias: selector de período + gráfica + registros recientes */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Tendencias</h3>
@@ -607,51 +558,8 @@ export default function DashboardBasico() {
               </ul>
             )}
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Dispositivo del Paciente ·{' '}
-                <span className="normal-case tracking-normal text-slate-900">
-                  {device?.model ?? 'Sin dispositivo'}
-                </span>
-              </h3>
-              <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                <span className="size-1.5 rounded-full bg-slate-400" aria-hidden="true" />
-                {device?.lastSyncAt ? 'Conectado' : 'Desconectado'}
-              </span>
-            </div>
-
-            <ul className="mt-6 space-y-3 text-sm">
-              <li className="flex items-center gap-2.5 text-slate-700">
-                <CheckCircle2 className="size-5 shrink-0 text-slate-400" aria-hidden="true" />
-                {device?.lastSyncAt ? 'Conexión establecida' : 'Esperando conexión'}
-              </li>
-              <li className="flex items-center gap-2.5 text-slate-600">
-                <Clock className="size-5 shrink-0 text-slate-400" aria-hidden="true" />
-                Última sincronización: {device?.lastSyncAt ?? '—'}
-              </li>
-            </ul>
-
-            <button
-              type="button"
-              onClick={() => setDeviceModalOpen(true)}
-              className="mt-6 w-full rounded-xl border-2 border-blue-600 py-2.5 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
-            >
-              Configuración de conexión
-            </button>
-          </div>
         </section>
       </main>
-
-      <RegisterDeviceModal
-        open={deviceModalOpen}
-        onClose={() => setDeviceModalOpen(false)}
-        onRegistered={() => {
-          setDeviceModalOpen(false)
-          showToast('Dispositivo Wear OS vinculado correctamente.')
-        }}
-      />
 
       {emergencyOpen && (
         <div

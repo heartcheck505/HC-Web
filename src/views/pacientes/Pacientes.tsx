@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
-  Battery,
   Bell,
   Heart,
   HeartPulse,
@@ -14,7 +13,6 @@ import {
   Star,
   User,
   Users,
-  Watch,
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -22,6 +20,8 @@ import {
   API_ENDPOINTS,
   NO_PATIENT_LABEL,
   apiClient,
+  getDailyStatistics,
+  getMeasurements,
   getPatientMe,
   getStoredEmergencyContact,
   getStoredPatientName,
@@ -31,12 +31,10 @@ import {
   shouldUseMockData,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
-import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
-import type { Device } from '../../types/device.types'
-import type { Measurement } from '../../types/measurement.types'
+import type { Alert } from '../../types/alert.types'
+import type { MeasurementReading } from '../../types/measurement.types'
 import type { PagedResult } from '../../types/patient.types'
-
-const heartRateBars = [40, 52, 46, 70, 52, 76, 60, 64, 48, 68, 55, 72]
+import type { DailyStatistic } from '../../types/statistics.types'
 
 interface EmergencyContactInfo {
   name: string
@@ -52,12 +50,6 @@ interface PatientProfile {
   contact: EmergencyContactInfo
 }
 
-interface DeviceInfo {
-  model: string
-  batteryLevel: number
-  lastSyncAt: string | null
-}
-
 interface ActivityItem {
   id: string
   icon: LucideIcon
@@ -66,6 +58,8 @@ interface ActivityItem {
   detail: string
   time: string
 }
+
+const TREND_DAYS = 7
 
 const FALLBACK_CONTACT: EmergencyContactInfo = {
   name: '',
@@ -79,12 +73,6 @@ const FALLBACK_PATIENT: PatientProfile = {
   address: 'Dirección no registrada',
   tutor: 'Cuidador',
   contact: FALLBACK_CONTACT,
-}
-
-const EMPTY_DEVICE: DeviceInfo = {
-  model: 'Sin dispositivo conectado',
-  batteryLevel: 0,
-  lastSyncAt: null,
 }
 
 function toArray<T>(payload: T[] | PagedResult<T> | null | undefined): T[] {
@@ -128,43 +116,29 @@ function formatReportTime(iso: string | null): string {
 }
 
 function buildActivityList(
-  measurements: Measurement[],
-  device: DeviceInfo,
+  measurements: MeasurementReading[],
 ): ActivityItem[] {
   const sorted = [...measurements].sort(
-    (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   )
-  const activity: ActivityItem[] = [
-    {
-      id: 'activity-sync',
-      icon: Watch,
-      tone: 'bg-sky-100 text-sky-600',
-      title: 'Sincronización del Smartwatch',
-      detail: `${device.model} · Batería ${device.batteryLevel}%`,
-      time: formatReportTime(device.lastSyncAt),
-    },
-  ]
-  if (!device.lastSyncAt) {
-    return []
-  }
-  return [
-    ...activity,
-    ...sorted.slice(0, 6).map((measurement) => ({
-      id: measurement.id,
-      icon: HeartPulse,
-      tone: 'bg-rose-100 text-rose-600',
-      title: 'Medición de pulso',
-      detail: `${measurement.heartRate} BPM · SpO₂ ${measurement.spo2}% · TA ${measurement.systolic}/${measurement.diastolic}`,
-      time: formatReportTime(measurement.recordedAt),
-    })),
-  ]
+  return sorted.slice(0, 6).map((measurement) => ({
+    id: `${measurement.timestamp}-${measurement.bpm}`,
+    icon: HeartPulse,
+    tone: measurement.isNormal
+      ? 'bg-rose-100 text-rose-600'
+      : 'bg-amber-100 text-amber-600',
+    title: measurement.isNormal
+      ? 'Medición de pulso'
+      : 'Medición de pulso fuera de rango',
+    detail: `${measurement.bpm} BPM${
+      measurement.notes ? ` · ${measurement.notes}` : ''
+    }`,
+    time: formatReportTime(measurement.timestamp),
+  }))
 }
 
 export default function Pacientes() {
-  const toastTimer = useRef<number | null>(null)
   const [emergencyOpen, setEmergencyOpen] = useState(false)
-  const [deviceModalOpen, setDeviceModalOpen] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
 
   const sessionUser = getStoredUser()
   const sessionPersonName = sessionUser
@@ -187,18 +161,9 @@ export default function Pacientes() {
     },
   }))
 
-  const showToast = (message: string): void => {
-    if (toastTimer.current !== null) {
-      window.clearTimeout(toastTimer.current)
-    }
-    setToast(message)
-    toastTimer.current = window.setTimeout(() => {
-      setToast(null)
-      toastTimer.current = null
-    }, 3500)
-  }
-  const [device, setDevice] = useState<DeviceInfo>(EMPTY_DEVICE)
-  const [measurements, setMeasurements] = useState<Measurement[]>([])
+  const [readings, setReadings] = useState<MeasurementReading[]>([])
+  const [dailyStats, setDailyStats] = useState<DailyStatistic[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -206,20 +171,24 @@ export default function Pacientes() {
     const loadData = async (): Promise<void> => {
       if (shouldUseMockData()) {
         setPatient(FALLBACK_PATIENT)
-        setDevice(EMPTY_DEVICE)
-        setMeasurements([])
+        setReadings([])
+        setDailyStats([])
+        setAlerts([])
         return
       }
 
       try {
-        const [patientResult, deviceResult, measurementResult] =
+        const to = new Date().toISOString()
+        const from = new Date(
+          Date.now() - TREND_DAYS * 24 * 60 * 60 * 1000,
+        ).toISOString()
+        const [patientResult, measurementsResult, statisticsResult, alertsResult] =
           await Promise.allSettled([
             getPatientMe(),
-            apiClient.get<Device[] | PagedResult<Device>>(
-              `${API_ENDPOINTS.devices.list}?page=1&pageSize=1`,
-            ),
-            apiClient.get<Measurement[] | PagedResult<Measurement>>(
-              `${API_ENDPOINTS.measurements.list}?page=1&pageSize=10`,
+            getMeasurements(),
+            getDailyStatistics(from, to),
+            apiClient.get<Alert[] | PagedResult<Alert>>(
+              `${API_ENDPOINTS.alerts.list}?pageSize=20`,
             ),
           ])
 
@@ -265,22 +234,24 @@ export default function Pacientes() {
           })
         }
 
-        if (deviceResult.status === 'fulfilled') {
-          const firstDevice = toArray(deviceResult.value)[0]
-          if (firstDevice) {
-            setDevice({
-              model: firstDevice.model || EMPTY_DEVICE.model,
-              batteryLevel:
-                firstDevice.batteryLevel ?? EMPTY_DEVICE.batteryLevel,
-              lastSyncAt: firstDevice.lastSyncAt,
-            })
+        if (measurementsResult.status === 'fulfilled') {
+          const list = toArray(measurementsResult.value)
+          if (list.length > 0) {
+            setReadings(list)
           }
         }
 
-        if (measurementResult.status === 'fulfilled') {
-          const list = toArray(measurementResult.value)
+        if (statisticsResult.status === 'fulfilled') {
+          const list = toArray(statisticsResult.value)
           if (list.length > 0) {
-            setMeasurements(list)
+            setDailyStats(list)
+          }
+        }
+
+        if (alertsResult.status === 'fulfilled') {
+          const list = toArray(alertsResult.value)
+          if (list.length > 0) {
+            setAlerts(list)
           }
         }
       } catch {
@@ -288,8 +259,9 @@ export default function Pacientes() {
           return
         }
         setPatient(FALLBACK_PATIENT)
-        setDevice(EMPTY_DEVICE)
-        setMeasurements([])
+        setReadings([])
+        setDailyStats([])
+        setAlerts([])
       }
     }
 
@@ -299,16 +271,44 @@ export default function Pacientes() {
     }
   }, [sessionPatientName, sessionPersonName])
 
-  const sortedMeasurements = [...measurements].sort(
-    (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+  const sortedReadings = [...readings].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   )
-  const latest = sortedMeasurements[0] ?? null
-  const latestBpm = latest?.heartRate ?? 0
-  const spo2 = latest?.spo2 ?? 0
-  const latestSys = latest?.systolic ?? 0
-  const latestDia = latest?.diastolic ?? 0
+  const latestReading = sortedReadings[0] ?? null
+  const latestBpm = latestReading?.bpm ?? 0
 
-  const activity = buildActivityList(measurements, device)
+  // Tendencia diaria real de GET /api/statistics/daily (últimos 7 días).
+  const trendStats = [...dailyStats]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(-TREND_DAYS)
+  const trendMax = Math.max(
+    60,
+    ...trendStats.map((stat) => stat.averageBpm),
+    ...readings.map((reading) => reading.bpm),
+  )
+  const trendBars = trendStats.map((stat) =>
+    Math.min(100, Math.round((stat.averageBpm / trendMax) * 100)),
+  )
+  const averageBpm =
+    trendStats.length > 0
+      ? Math.round(
+          trendStats.reduce((sum, stat) => sum + stat.averageBpm, 0) /
+            trendStats.length,
+        )
+      : readings.length > 0
+        ? Math.round(
+            readings.reduce((sum, reading) => sum + reading.bpm, 0) /
+              readings.length,
+          )
+        : 0
+  const totalMeasurements =
+    trendStats.reduce((sum, stat) => sum + stat.totalMeasurements, 0) ||
+    readings.length
+
+  const activeAlerts = alerts.filter((alert) => alert.status === 'Active')
+  const latestAlert = activeAlerts[0] ?? null
+
+  const activity = buildActivityList(readings)
   const emergencyPhone = normalizePhoneForTel(patient.contact.phone)
   // Solo se muestra el aviso de vacío si no hay nombre NI teléfono válidos.
   const hasEmergencyContact = Boolean(
@@ -320,13 +320,6 @@ export default function Pacientes() {
     .slice(0, 2)
     .join('')
     .toUpperCase()
-
-  const batteryColor =
-    device.batteryLevel >= 50
-      ? 'bg-emerald-500'
-      : device.batteryLevel >= 30
-        ? 'bg-amber-500'
-        : 'bg-rose-500'
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -381,7 +374,7 @@ export default function Pacientes() {
               Pacientes
             </h1>
             <p className="mt-2 text-sm text-slate-600">
-              Gestiona la salud y el dispositivo de tus pacientes.
+              Gestiona la salud de tus pacientes.
             </p>
           </div>
           <button
@@ -450,54 +443,7 @@ export default function Pacientes() {
           </div>
         </section>
 
-        <section className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Conexión y Batería
-              </p>
-              <span className="flex size-9 items-center justify-center rounded-full bg-sky-100">
-                <Watch className="size-5 text-sky-600" aria-hidden="true" />
-              </span>
-            </div>
-            <p className="mt-4 text-lg font-bold text-slate-900">
-              {device.model}
-            </p>
-            <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-              <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-              Conectado
-            </span>
-            <div className="mt-5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-1.5 text-slate-500">
-                  <Battery className="size-4" aria-hidden="true" />
-                  Batería
-                </span>
-                <span className="font-semibold text-slate-800">
-                  {device.batteryLevel}%
-                </span>
-              </div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className={`h-full rounded-full ${batteryColor}`}
-                  style={{ width: `${device.batteryLevel}%` }}
-                />
-              </div>
-            </div>
-            <p className="mt-4 text-xs text-slate-500">
-              Última sincronización:{' '}
-              {formatReportTime(device.lastSyncAt)}
-            </p>
-            <button
-              type="button"
-              onClick={() => setDeviceModalOpen(true)}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-blue-600 py-2.5 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
-            >
-              <Watch className="size-4" aria-hidden="true" />
-              Vincular dispositivo
-            </button>
-          </div>
-
+        <section className="mt-6 grid gap-6 md:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -509,35 +455,58 @@ export default function Pacientes() {
             </div>
             <div className="mt-4 flex items-baseline gap-1.5">
               <span className="text-4xl font-extrabold text-slate-900">
-                {latestBpm}
+                {latestBpm > 0 ? latestBpm : '--'}
               </span>
               <span className="text-lg font-semibold text-slate-500">BPM</span>
+              {latestReading && (
+                <span className="ml-auto text-xs text-slate-400">
+                  Última lectura: {formatReportTime(latestReading.timestamp)}
+                </span>
+              )}
             </div>
             <div className="mt-4 flex h-10 items-end gap-1.5" aria-hidden="true">
-              {heartRateBars.map((height, index) => (
+              {trendBars.map((height, index) => (
                 <span
                   key={index}
                   className="w-2 rounded-full bg-rose-300"
                   style={{ height: `${height}%` }}
                 />
               ))}
+              {trendBars.length === 0 && (
+                <span className="text-xs text-slate-400">
+                  Sin datos de tendencia todavía.
+                </span>
+              )}
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg bg-slate-50 px-3 py-2">
-                <p className="text-xs text-slate-500">Saturación O₂</p>
-                <p className="font-semibold text-slate-800">{spo2}%</p>
+                <p className="text-xs text-slate-500">Promedio BPM</p>
+                <p className="font-semibold text-slate-800">
+                  {averageBpm > 0 ? averageBpm : '—'}
+                </p>
               </div>
               <div className="rounded-lg bg-slate-50 px-3 py-2">
-                <p className="text-xs text-slate-500">Presión</p>
+                <p className="text-xs text-slate-500">Mediciones</p>
                 <p className="font-semibold text-slate-800">
-                  {latestSys}/{latestDia}
+                  {totalMeasurements}
                 </p>
               </div>
             </div>
-            <p className="mt-4 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700">
-              <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-              Sin alertas ni síntomas recientes
-            </p>
+            {activeAlerts.length > 0 && latestAlert ? (
+              <p className="mt-4 flex items-start gap-1.5 rounded-lg bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-700">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <span>
+                  {activeAlerts.length} alerta
+                  {activeAlerts.length > 1 ? 's' : ''} activa
+                  {activeAlerts.length > 1 ? 's' : ''}: {latestAlert.message}
+                </span>
+              </p>
+            ) : (
+              <p className="mt-4 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700">
+                <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                Sin alertas activas
+              </p>
+            )}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -603,7 +572,7 @@ export default function Pacientes() {
           </div>
           {activity.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">
-              Sin actividad de dispositivo o mediciones todavía.
+              Sin mediciones registradas todavía.
             </p>
           ) : (
           <ul className="mt-4 divide-y divide-slate-100">
@@ -653,15 +622,6 @@ export default function Pacientes() {
           </Link>
         </section>
       </main>
-
-      <RegisterDeviceModal
-        open={deviceModalOpen}
-        onClose={() => setDeviceModalOpen(false)}
-        onRegistered={() => {
-          setDeviceModalOpen(false)
-          showToast('Dispositivo Wear OS vinculado correctamente.')
-        }}
-      />
 
       {emergencyOpen && (
         <div
@@ -726,15 +686,6 @@ export default function Pacientes() {
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white shadow-lg"
-        >
-          {toast}
         </div>
       )}
     </div>
