@@ -477,19 +477,24 @@ describe('buildPatientMePayload', () => {
     ])
   })
 
-  it('incluye id en el payload solo cuando GET lo devolvió (nunca vacío o null)', () => {
+  it('envía el id en Id (PascalCase), id (camelCase) y patientId, y lo omite si no existe', () => {
+    const objectId = '664f0c2a9d3b4c0012ab34cd'
     const withId = buildPatientMePayload({
-      id: 'pat-123',
+      id: objectId,
       firstName: 'Juan',
       lastName: 'García',
     })
-    expect(withId.id).toBe('pat-123')
+    expect(withId.id).toBe(objectId)
+    expect(withId.Id).toBe(objectId)
+    expect(withId.patientId).toBe(objectId)
 
     const withoutId = buildPatientMePayload({
       firstName: 'Juan',
       lastName: 'García',
     })
     expect('id' in withoutId).toBe(false)
+    expect('Id' in withoutId).toBe(false)
+    expect('patientId' in withoutId).toBe(false)
 
     const nullId = buildPatientMePayload({
       id: null,
@@ -497,6 +502,8 @@ describe('buildPatientMePayload', () => {
       lastName: 'García',
     })
     expect('id' in nullId).toBe(false)
+    expect('Id' in nullId).toBe(false)
+    expect('patientId' in nullId).toBe(false)
 
     const blankId = buildPatientMePayload({
       id: '   ',
@@ -504,6 +511,8 @@ describe('buildPatientMePayload', () => {
       lastName: 'García',
     })
     expect('id' in blankId).toBe(false)
+    expect('Id' in blankId).toBe(false)
+    expect('patientId' in blankId).toBe(false)
   })
 })
 

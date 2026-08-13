@@ -22,11 +22,16 @@ export interface EmergencyContact {
  */
 export interface PatientMeRequest {
   /**
-   * Id del paciente. `GET /api/patients/me` lo devuelve; `PUT` lo exige como
-   * requerido (validación de ASP.NET Core). Si no está disponible, la UI omite
-   * el campo en lugar de enviar un `id` vacío o `null`.
+   * Id del paciente (ObjectId MongoDB, 24 caracteres hex). `GET` lo devuelve;
+   * `PUT /api/patients/me` lo exige (validación de ASP.NET Core). En el
+   * request viaja también como `Id` (PascalCase) y `patientId` para cubrir la
+   * deserialización del modelo; si no está disponible, la UI omite el campo.
    */
   id?: string | null
+  /** Id del paciente en PascalCase, requerido por la validación de ASP.NET. */
+  Id?: string | null
+  /** Id del paciente como propiedad alternativa (`patientId`). */
+  patientId?: string | null
   firstName: string
   lastName: string
   phone?: string | null

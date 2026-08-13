@@ -810,10 +810,16 @@ export function buildPatientMePayload(
             isPrimary: contact?.isPrimary === true,
           })),
   }
-  // `Id` es requerido por la validación del backend en PUT /api/patients/me:
-  // solo se incluye cuando GET lo devolvió, nunca vacío ni null.
+  // El backend (ASP.NET Core) valida la propiedad `Id` como requerida en
+  // PUT /api/patients/me. Para cubrir la deserialización del modelo sin
+  // importar la convención de naming, el ObjectId del paciente viaja en las
+  // tres variantes: `Id` (PascalCase), `id` (camelCase) y `patientId`.
+  // Si no está disponible, el campo se omite por completo: nunca un id vacío.
   if (typeof input.id === 'string' && input.id.trim() !== '') {
-    payload.id = input.id.trim()
+    const patientId = input.id.trim()
+    payload.id = patientId
+    payload.Id = patientId
+    payload.patientId = patientId
   }
   return payload
 }
