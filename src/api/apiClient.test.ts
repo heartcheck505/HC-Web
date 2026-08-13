@@ -1142,6 +1142,25 @@ describe('login: POST /auth/login', () => {
     expect(response).toEqual({ token: 'jwt-nuevo', user: { id: 'u1' } })
   })
 
+  it('resuelve API_BASE_URL a HTTPS cuando la app corre en un origen HTTPS', async () => {
+    const httpsWindow = {
+      ...fakeWindow,
+      location: { ...fakeWindow.location, protocol: 'https:' },
+    }
+    ;(globalThis as unknown as { window: typeof httpsWindow }).window =
+      httpsWindow
+    vi.resetModules()
+    const fresh = await import('./apiClient')
+    expect(fresh.API_BASE_URL).toBe('https://heartcheckapi.runasp.net/api')
+    expect(fresh.API_BASE_URL.startsWith('http://')).toBe(false)
+  })
+
+  it('mantiene HTTP cuando el origen de la app es HTTP', async () => {
+    vi.resetModules()
+    const fresh = await import('./apiClient')
+    expect(fresh.API_BASE_URL).toBe('http://heartcheckapi.runasp.net/api')
+  })
+
   it('expone el mensaje exacto del backend en errores JSON', async () => {
     setStoredToken('jwt-test')
     vi.stubGlobal(

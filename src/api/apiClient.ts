@@ -5,19 +5,17 @@
  * - El token JWT jamás se compromete en el código; se lee desde
  *   `sessionStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
- * - La URL base apunta directamente al backend de producción en HTTP:
- *   `http://heartcheckapi.runasp.net/api` por defecto, porque el servidor
- *   runasp.net NO sirve HTTPS (ERR_CONNECTION_RESET). Prioridad de resolución:
- *   `VITE_API_BASE_URL_HTTPS` (solo si algún día el backend expone HTTPS) →
- *   `VITE_API_BASE_URL` → default HTTP. La CSP (meta de `index.html` y la
- *   inyectada por `vite.config.ts` en build) NO contiene
- *   `upgrade-insecure-requests` ni restringe el esquema: `connect-src` admite
- *   `http://` y `https://` con comodines `*.runasp.net`, por lo que el
- *   navegador jamás reescribe `http://` a `https://` (eso causaba el
- *   ERR_CONNECTION_RESET). Nunca se usa una ruta relativa `/api` como base:
- *   todas las peticiones salen a la URL absoluta del backend (p. ej.
- *   `GET http://heartcheckapi.runasp.net/api/patients/me`). En local se puede
- *   conservar el proxy de `vite.config.ts` fijando `VITE_API_BASE_URL=/api`.
+ * - La URL base (`API_BASE_URL`) se resuelve en `resolveApiBaseUrl()`: con
+ *   `VITE_API_BASE_URL_HTTPS` / `VITE_API_BASE_URL` como overrides, y sin
+ *   variables se adapta al protocolo del origen de la app (HTTPS → API HTTPS,
+ *   HTTP → API HTTP) para evitar el bloqueo de Mixed Content entre Render y
+ *   runasp.net. Si Render reenvía `/api` por proxy, basta fijar
+ *   `VITE_API_BASE_URL=/api` (ruta relativa, sin protocolo hardcodeado).
+ *   La CSP (meta de `index.html` y la inyectada por `vite.config.ts`) no
+ *   contiene `upgrade-insecure-requests` y admite `http://`, `https://` y
+ *   comodines `*.runasp.net`, por lo que ninguna petición fetch se bloquea.
+ *   En local se puede conservar el proxy de `vite.config.ts` con
+ *   `VITE_API_BASE_URL=/api`.
  * - Cortocircuito de datos de prueba: cuando `shouldUseMockData()` es
  *   verdadero (sin token o `VITE_USE_MOCK_DATA=true`), ninguna petición
  *   `GET` sale a la red: se lanza un `ApiError` simulado (status 0) que los
@@ -53,11 +51,43 @@ import type {
 import type { Plan, UserPlanSubscription } from '../types/plan.types'
 import type { DailyStatistic } from '../types/statistics.types'
 
-export const API_BASE_URL: string = (
-  import.meta.env.VITE_API_BASE_URL_HTTPS ||
-  import.meta.env.VITE_API_BASE_URL ||
-  'http://heartcheckapi.runasp.net/api'
-).replace(/\/+$/, '')
+/**
+ * Resuelve la URL base de la API con esta prioridad:
+ * 1. `VITE_API_BASE_URL_HTTPS` — fuerza HTTPS explícito (si runasp.net llega
+ *    a exponer un subdominio SSL).
+ * 2. `VITE_API_BASE_URL` — override explícito; admite una ruta relativa
+ *    (`/api`) cuando Render/Vite/servidor proxy reenvía el mismo origen, o
+ *    una URL absoluta.
+ * 3. Sin variables: el protocolo se adapta al origen de la app para nunca
+ *    mezclar HTTP/HTTPS. Si la web corre en HTTPS (Render), se usa
+ *    `https://heartcheckapi.runasp.net/api` (evita el bloqueo de Mixed
+ *    Content); si corre en HTTP (local), `http://heartcheckapi.runasp.net/api`.
+ */
+function resolveApiBaseUrl(): string {
+  const explicitHttps = import.meta.env.VITE_API_BASE_URL_HTTPS
+  if (explicitHttps) {
+    return explicitHttps.replace(/\/+$/, '')
+  }
+  const explicit = import.meta.env.VITE_API_BASE_URL
+  if (explicit) {
+    return explicit.replace(/\/+$/, '')
+  }
+  let protocol = 'http:'
+  try {
+    if (
+      typeof window !== 'undefined' &&
+      window.location &&
+      window.location.protocol === 'https:'
+    ) {
+      protocol = 'https:'
+    }
+  } catch {
+    protocol = 'http:'
+  }
+  return `${protocol}//heartcheckapi.runasp.net/api`
+}
+
+export const API_BASE_URL: string = resolveApiBaseUrl()
 
 const TOKEN_STORAGE_KEY = 'heartcheck.token'
 const USER_STORAGE_KEY = 'heartcheck.user'
