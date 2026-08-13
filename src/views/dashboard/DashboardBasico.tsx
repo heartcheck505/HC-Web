@@ -30,6 +30,7 @@ import {
 import Sidebar from '../../components/layout/Sidebar'
 import PlanChangeModal from '../../components/plan/PlanChangeModal'
 import HeartRateTrendChart from '../../components/charts/HeartRateTrendChart'
+import RiskAssessmentCard from '../../components/risk/RiskAssessmentCard'
 import {
   formatTimeLabel,
   limitLatestReadings,
@@ -512,6 +513,10 @@ export default function DashboardBasico() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="mt-4">
+              <RiskAssessmentCard locked />
             </div>
 
             <div className="mt-5 rounded-2xl border border-slate-100 bg-white p-4">

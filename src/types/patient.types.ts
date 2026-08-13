@@ -30,6 +30,11 @@ export interface PatientMeRequest {
   emergencyContactName?: string | null
   emergencyContactPhone?: string | null
   address?: string | null
+  initialDiagnosis?: string | null
+  assignedDoctor?: string | null
+  observations?: string | null
+  medications?: string[] | null
+  emergencyContacts?: EmergencyContact[] | null
 }
 
 export interface PatientMe extends PatientMeRequest {

@@ -20,6 +20,8 @@ import {
   isAuthenticated,
   normalizePatientMe,
   normalizePhoneForTel,
+  normalizeRiskAssessment,
+  normalizeRiskLevel,
   normalizeStoredUser,
   restorePatientProfile,
   setStoredPatient,
@@ -371,17 +373,27 @@ describe('buildPatientMePayload', () => {
       emergencyContactName: 'María García',
       emergencyContactPhone: '555-5678',
       address: 'Calle 1 #23',
+      initialDiagnosis: null,
+      assignedDoctor: null,
+      observations: null,
+      medications: null,
+      emergencyContacts: null,
     })
     expect(Object.keys(payload).sort()).toEqual(
       [
         'address',
+        'assignedDoctor',
         'bloodType',
         'dateOfBirth',
         'emergencyContactName',
         'emergencyContactPhone',
+        'emergencyContacts',
         'firstName',
         'gender',
+        'initialDiagnosis',
         'lastName',
+        'medications',
+        'observations',
         'phone',
       ].sort(),
     )
@@ -413,6 +425,87 @@ describe('buildPatientMePayload', () => {
       emergencyContactPhone: null,
       address: null,
     })
+  })
+
+  it('incluye la información clínica y los contactos en el payload', () => {
+    const payload = buildPatientMePayload({
+      firstName: 'Juan',
+      lastName: 'García',
+      initialDiagnosis: 'Hipertensión arterial',
+      assignedDoctor: 'Dra. Pérez',
+      observations: 'Requiere control mensual.',
+      medications: ['Atorvastatina 10 mg', 'Metoprolol 50 mg'],
+      emergencyContacts: [
+        {
+          name: 'María García',
+          relationship: 'hijo/a',
+          phone: '+52 55 1111 1111',
+          email: 'maria@example.com',
+          isPrimary: true,
+        },
+      ],
+    })
+    expect(payload).toMatchObject({
+      initialDiagnosis: 'Hipertensión arterial',
+      assignedDoctor: 'Dra. Pérez',
+      observations: 'Requiere control mensual.',
+      medications: ['Atorvastatina 10 mg', 'Metoprolol 50 mg'],
+      emergencyContacts: [
+        {
+          name: 'María García',
+          relationship: 'hijo/a',
+          phone: '+52 55 1111 1111',
+          email: 'maria@example.com',
+          isPrimary: true,
+        },
+      ],
+    })
+  })
+
+  it('normaliza medications a arreglo plano y contactos vacíos a null', () => {
+    const payload = buildPatientMePayload({
+      firstName: 'Ana',
+      lastName: 'Pérez',
+      medications: ['  ', 'Aspirina 100 mg'],
+      emergencyContacts: [
+        { name: '', relationship: '', phone: '', isPrimary: false },
+      ],
+    })
+    expect(payload.medications).toEqual(['Aspirina 100 mg'])
+    expect(payload.emergencyContacts).toEqual([
+      { name: '', relationship: '', phone: '', email: null, isPrimary: false },
+    ])
+  })
+})
+
+describe('riskAssessment del modelo de ML', () => {
+  it('normaliza riskLevel a un vocabulario único (español/inglés)', () => {
+    expect(normalizeRiskLevel('bajo')).toBe('bajo')
+    expect(normalizeRiskLevel('LOW')).toBe('bajo')
+    expect(normalizeRiskLevel('medio')).toBe('medio')
+    expect(normalizeRiskLevel('moderate')).toBe('medio')
+    expect(normalizeRiskLevel('alto')).toBe('alto')
+    expect(normalizeRiskLevel('High')).toBe('alto')
+    expect(normalizeRiskLevel('critico')).toBe('critico')
+    expect(normalizeRiskLevel('critical')).toBe('critico')
+    expect(normalizeRiskLevel('desconocido')).toBeNull()
+    expect(normalizeRiskLevel(null)).toBeNull()
+    expect(normalizeRiskLevel(42)).toBeNull()
+  })
+
+  it('mapea el objeto riskAssessment y degrada objetos vacíos a null', () => {
+    expect(
+      normalizeRiskAssessment({
+        riskLevel: 'medium',
+        score: 55.5,
+        recommendation: 'Monitorear.',
+      }),
+    ).toEqual({ riskLevel: 'medio', score: 55.5, recommendation: 'Monitorear.' })
+    expect(normalizeRiskAssessment(null)).toBeNull()
+    expect(normalizeRiskAssessment('texto')).toBeNull()
+    expect(
+      normalizeRiskAssessment({ riskLevel: 'x', score: null, recommendation: '' }),
+    ).toBeNull()
   })
 })
 
@@ -833,6 +926,7 @@ describe('getMeasurements', () => {
         isNormal: true,
         notes: null,
         symptoms: ['mareo', 'dolor de cabeza'],
+        riskAssessment: null,
       },
       {
         timestamp: '2026-08-13T11:00:00Z',
@@ -843,8 +937,72 @@ describe('getMeasurements', () => {
         isNormal: false,
         notes: 'palpitaciones',
         symptoms: [],
+        riskAssessment: null,
       },
     ])
+  })
+
+  it('mapea el riskAssessment del modelo de ML y lo normaliza', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        okJsonResponse([
+          {
+            timestamp: '2026-08-13T10:00:00Z',
+            deviceId: 'd1',
+            bpm: 72,
+            quality: null,
+            context: null,
+            isNormal: true,
+            notes: null,
+            symptoms: null,
+            riskAssessment: {
+              riskLevel: 'HIGH',
+              score: 68.4,
+              recommendation: 'Monitorear la presión arterial esta semana.',
+            },
+          },
+          {
+            timestamp: '2026-08-13T11:00:00Z',
+            deviceId: 'd1',
+            bpm: 60,
+            quality: null,
+            context: null,
+            isNormal: true,
+            notes: null,
+            symptoms: null,
+            riskAssessment: null,
+          },
+        ]),
+      ),
+    )
+    const readings = await getMeasurements()
+    expect(readings[0].riskAssessment).toEqual({
+      riskLevel: 'alto',
+      score: 68.4,
+      recommendation: 'Monitorear la presión arterial esta semana.',
+    })
+    expect(readings[1].riskAssessment).toBeNull()
+  })
+
+  it('degradan riskAssessment vacío o sin datos reconocibles a null', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        okJsonResponse([
+          {
+            timestamp: '2026-08-13T10:00:00Z',
+            deviceId: 'd1',
+            bpm: 72,
+            riskAssessment: { riskLevel: 'desconocido', score: null, recommendation: '' },
+          },
+        ]),
+      ),
+    )
+    const readings = await getMeasurements()
+    expect(readings[0].riskAssessment).toBeNull()
   })
 
   it('devuelve un arreglo vacío si la respuesta no es un arreglo', async () => {

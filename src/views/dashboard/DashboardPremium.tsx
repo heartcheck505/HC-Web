@@ -16,7 +16,6 @@ import {
   Moon,
   RefreshCw,
   Search,
-  Sparkles,
   Star,
   X,
 } from 'lucide-react'
@@ -32,6 +31,8 @@ import {
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import HeartRateTrendChart from '../../components/charts/HeartRateTrendChart'
+import { getLatestRiskAssessment } from '../../components/risk/riskAssessment'
+import RiskAssessmentCard from '../../components/risk/RiskAssessmentCard'
 import type { Alert, AlertSeverity, AlertStatus, AlertType } from '../../types/alert.types'
 import type { MeasurementReading } from '../../types/measurement.types'
 import type { PagedResult } from '../../types/patient.types'
@@ -259,7 +260,6 @@ export default function DashboardPremium() {
   const [sleepTimeMinutes, setSleepTimeMinutes] = useState<number>(0)
   const [sleepPhases, setSleepPhases] = useState<number[]>([])
   const [stabilityScore, setStabilityScore] = useState<number | null>(null)
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [events, setEvents] = useState<Alert[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -346,13 +346,13 @@ export default function DashboardPremium() {
         }
         // VFC, sueño, puntaje de estabilidad y análisis predictivo: el
         // backend aún no los expone; se mantienen en espera (0 / '--' /
-        // vacíos) hasta disponer del servicio.
+        // vacíos) hasta disponer del servicio. El riesgo ML se lee de
+        // `riskAssessment` en cada lectura real.
         setHrv(0)
         setSleepScore(0)
         setSleepTimeMinutes(0)
         setSleepPhases([])
         setStabilityScore(null)
-        setAiAnalysis(null)
       })
       .catch(() => {
         return
@@ -381,6 +381,8 @@ export default function DashboardPremium() {
   // SpO₂ no está en el modelo exacto de GET /api/measurements; se mantiene en
   // espera ('--') hasta que la API exponga el indicador.
   const spo2 = 0
+  // Evaluación de riesgo del modelo de ML sobre las lecturas reales.
+  const latestRisk = getLatestRiskAssessment(measurementReadings)
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -470,30 +472,7 @@ export default function DashboardPremium() {
             </p>
 
             <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-5">
-              {aiAnalysis ? (
-                <div className="flex items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600">
-                    <Sparkles className="size-4 text-white" aria-hidden="true" />
-                  </span>
-                  <p className="text-sm leading-relaxed text-blue-950">
-                    {aiAnalysis}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600/10">
-                    <Sparkles className="size-4 text-blue-600" aria-hidden="true" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-medium text-blue-900">
-                      Análisis Predictivo en espera
-                    </p>
-                    <p className="text-xs text-blue-700/80">
-                      Esperando telemetría para generar la predicción.
-                    </p>
-                  </div>
-                </div>
-              )}
+              <RiskAssessmentCard riskAssessment={latestRisk} />
             </div>
           </div>
 

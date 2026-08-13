@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
   AlertTriangle,
   Bell,
@@ -9,8 +9,11 @@ import {
   MapPin,
   MessageCircle,
   Phone,
+  Pill,
+  Save,
   Search,
   Star,
+  Stethoscope,
   User,
   Users,
   X,
@@ -26,14 +29,23 @@ import {
   getStoredEmergencyContact,
   getStoredPatientName,
   getStoredUser,
+  getUserPlan,
   normalizePhoneForTel,
   setStoredPatient,
   shouldUseMockData,
+  updatePatientMe,
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
+import RiskAssessmentCard from '../../components/risk/RiskAssessmentCard'
+import { getLatestRiskAssessment } from '../../components/risk/riskAssessment'
 import type { Alert } from '../../types/alert.types'
+import type { Relationship } from '../../types/auth.types'
 import type { MeasurementReading } from '../../types/measurement.types'
-import type { PagedResult } from '../../types/patient.types'
+import type {
+  PagedResult,
+  PatientMe,
+  PatientMeCompatibility,
+} from '../../types/patient.types'
 import type { DailyStatistic } from '../../types/statistics.types'
 
 interface EmergencyContactInfo {
@@ -57,6 +69,56 @@ interface ActivityItem {
   title: string
   detail: string
   time: string
+}
+
+interface ClinicalFormState {
+  initialDiagnosis: string
+  assignedDoctor: string
+  observations: string
+  medicationsText: string
+  emergencyContactName: string
+  emergencyRelationship: Relationship
+  emergencyPhone: string
+  emergencyEmail: string
+}
+
+const relationshipOptions: { value: Relationship; label: string }[] = [
+  { value: 'spouse', label: 'Cónyuge / Pareja' },
+  { value: 'hijo/a', label: 'Hijo/a' },
+  { value: 'padre/madre', label: 'Padre / Madre' },
+  { value: 'otro', label: 'Otro' },
+]
+
+const EMPTY_CLINICAL_FORM: ClinicalFormState = {
+  initialDiagnosis: '',
+  assignedDoctor: '',
+  observations: '',
+  medicationsText: '',
+  emergencyContactName: '',
+  emergencyRelationship: 'otro',
+  emergencyPhone: '',
+  emergencyEmail: '',
+}
+
+function clinicalFormFromProfile(
+  profile: PatientMe & PatientMeCompatibility | null,
+): ClinicalFormState {
+  if (!profile) {
+    return EMPTY_CLINICAL_FORM
+  }
+  const primary = profile.emergencyContacts?.find(
+    (contact) => contact?.isPrimary === true,
+  ) ?? profile.emergencyContacts?.[0]
+  return {
+    initialDiagnosis: profile.initialDiagnosis ?? '',
+    assignedDoctor: profile.assignedDoctor ?? '',
+    observations: profile.observations ?? '',
+    medicationsText: (profile.medications ?? []).join('\n'),
+    emergencyContactName: primary?.name ?? profile.emergencyContactName ?? '',
+    emergencyRelationship: (primary?.relationship as Relationship) || 'otro',
+    emergencyPhone: primary?.phone ?? profile.emergencyContactPhone ?? '',
+    emergencyEmail: primary?.email ?? '',
+  }
 }
 
 const TREND_DAYS = 7
@@ -138,7 +200,13 @@ function buildActivityList(
 }
 
 export default function Pacientes() {
+  const location = useLocation()
   const [emergencyOpen, setEmergencyOpen] = useState(false)
+  const isPremium = getUserPlan() === 'premium'
+  const registrationComplete = Boolean(
+    (location.state as { registrationComplete?: boolean } | null)
+      ?.registrationComplete,
+  )
 
   const sessionUser = getStoredUser()
   const sessionPersonName = sessionUser
@@ -164,6 +232,99 @@ export default function Pacientes() {
   const [readings, setReadings] = useState<MeasurementReading[]>([])
   const [dailyStats, setDailyStats] = useState<DailyStatistic[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
+  // Perfil crudo de GET /api/patients/me: fuente para editar y guardar la
+  // información clínica mediante PUT /api/patients/me.
+  const [profile, setProfile] = useState<
+    (PatientMe & PatientMeCompatibility) | null
+  >(null)
+
+  // Modal de Información Clínica.
+  const [clinicalOpen, setClinicalOpen] = useState(false)
+  const [clinicalForm, setClinicalForm] =
+    useState<ClinicalFormState>(EMPTY_CLINICAL_FORM)
+  const [clinicalSaving, setClinicalSaving] = useState(false)
+  const [clinicalSaved, setClinicalSaved] = useState(false)
+  const [clinicalError, setClinicalError] = useState<string | null>(null)
+
+  const openClinicalModal = (): void => {
+    setClinicalForm(clinicalFormFromProfile(profile))
+    setClinicalSaved(false)
+    setClinicalError(null)
+    setClinicalOpen(true)
+  }
+
+  const updateClinicalField = <K extends keyof ClinicalFormState>(
+    key: K,
+    value: ClinicalFormState[K],
+  ): void => {
+    setClinicalForm((current) => ({ ...current, [key]: value }))
+  }
+
+  const handleClinicalSave = async (): Promise<void> => {
+    if (!profile) {
+      return
+    }
+    setClinicalSaving(true)
+    setClinicalError(null)
+    try {
+      const medications = clinicalForm.medicationsText
+        .split('\n')
+        .map((item) => item.trim())
+        .filter((item) => item !== '')
+      const updated = await updatePatientMe({
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        phone: profile.phone,
+        dateOfBirth: profile.dateOfBirth,
+        gender: profile.gender,
+        bloodType: profile.bloodType,
+        address: profile.address,
+        initialDiagnosis: clinicalForm.initialDiagnosis.trim() || null,
+        assignedDoctor: clinicalForm.assignedDoctor.trim() || null,
+        observations: clinicalForm.observations.trim() || null,
+        medications,
+        emergencyContactName: clinicalForm.emergencyContactName.trim() || null,
+        emergencyContactPhone: clinicalForm.emergencyPhone.trim() || null,
+        emergencyContacts: [
+          {
+            name: clinicalForm.emergencyContactName.trim(),
+            relationship: clinicalForm.emergencyRelationship,
+            phone: clinicalForm.emergencyPhone.trim(),
+            email: clinicalForm.emergencyEmail.trim() || null,
+            isPrimary: true,
+          },
+        ],
+      })
+      setProfile(updated)
+      setClinicalSaved(true)
+      // El contacto de emergencia actualizado se refleja en el resto de las
+      // vistas de la sesión (Dashboard, modal de emergencia).
+      setStoredPatient({
+        firstName: updated.firstName,
+        lastName: updated.lastName,
+        emergencyContactName: updated.emergencyContactName ?? null,
+        emergencyContactPhone: updated.emergencyContactPhone ?? null,
+      })
+      setPatient((current) => ({
+        ...current,
+        contact: {
+          ...current.contact,
+          name:
+            updated.emergencyContactName?.trim() ||
+            current.contact.name,
+          phone:
+            updated.emergencyContactPhone?.trim() || current.contact.phone,
+        },
+      }))
+      window.setTimeout(() => setClinicalOpen(false), 900)
+    } catch (error) {
+      setClinicalError(
+        error instanceof Error ? error.message : 'No se pudo guardar.',
+      )
+    } finally {
+      setClinicalSaving(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -198,6 +359,7 @@ export default function Pacientes() {
 
         if (patientResult.status === 'fulfilled' && patientResult.value) {
           const apiPatient = patientResult.value
+          setProfile(apiPatient)
           const storedEmergency = getStoredEmergencyContact()
           const apiFullName =
             `${apiPatient.firstName} ${apiPatient.lastName}`.trim()
@@ -312,6 +474,7 @@ export default function Pacientes() {
 
   const activity = buildActivityList(readings)
   const emergencyPhone = normalizePhoneForTel(patient.contact.phone)
+  const latestRisk = getLatestRiskAssessment(readings)
   // Solo se muestra el aviso de vacío si no hay nombre NI teléfono válidos.
   const hasEmergencyContact = Boolean(
     patient.contact.name.trim() || patient.contact.phone.trim(),
@@ -369,6 +532,35 @@ export default function Pacientes() {
             </button>
           </div>
         </header>
+
+        {registrationComplete && (
+          <div
+            role="status"
+            className="mt-6 flex flex-col gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-5 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-600">
+                <Stethoscope className="size-5 text-white" aria-hidden="true" />
+              </span>
+              <div>
+                <p className="font-semibold text-blue-950">
+                  ¡Cuenta creada correctamente!
+                </p>
+                <p className="mt-0.5 text-sm text-blue-800/80">
+                  Completa la información clínica del paciente para que el
+                  monitoreo y las tendencias sean más precisos.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={openClinicalModal}
+              className="shrink-0 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-blue-700"
+            >
+              Completar Información Clínica
+            </button>
+          </div>
+        )}
 
         <section className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -509,6 +701,14 @@ export default function Pacientes() {
                 Sin alertas activas
               </p>
             )}
+            {/* Análisis Predictivo (ML): datos reales en Premium, callout
+                bloqueado en el plan básico. Nunca rompe con datos nulos. */}
+            <div className="mt-4">
+              <RiskAssessmentCard
+                riskAssessment={latestRisk}
+                locked={!isPremium}
+              />
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -687,6 +887,213 @@ export default function Pacientes() {
                 Llama ahora
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {clinicalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clinical-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4"
+          onClick={() => setClinicalOpen(false)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex size-11 items-center justify-center rounded-full bg-blue-100">
+                  <Stethoscope className="size-5 text-blue-600" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 id="clinical-title" className="text-lg font-bold text-slate-900">
+                    Información Clínica
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Se guarda con PUT /api/patients/me
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClinicalOpen(false)}
+                aria-label="Cerrar"
+                className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            {clinicalSaved ? (
+              <p
+                role="status"
+                className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700"
+              >
+                Información clínica guardada correctamente.
+              </p>
+            ) : (
+              <div className="mt-5 space-y-4">
+                {clinicalError && (
+                  <p
+                    role="alert"
+                    className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+                  >
+                    {clinicalError}
+                  </p>
+                )}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="clinical-diagnosis"
+                      className="block text-sm font-medium text-slate-700"
+                    >
+                      Diagnóstico inicial
+                    </label>
+                    <input
+                      id="clinical-diagnosis"
+                      value={clinicalForm.initialDiagnosis}
+                      onChange={(event) =>
+                        updateClinicalField('initialDiagnosis', event.target.value)
+                      }
+                      placeholder="Ej. Hipertensión arterial"
+                      className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="clinical-doctor"
+                      className="block text-sm font-medium text-slate-700"
+                    >
+                      Médico tratante
+                    </label>
+                    <input
+                      id="clinical-doctor"
+                      value={clinicalForm.assignedDoctor}
+                      onChange={(event) =>
+                        updateClinicalField('assignedDoctor', event.target.value)
+                      }
+                      placeholder="Ej. Dra. Pérez"
+                      className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="clinical-observations"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    Observaciones
+                  </label>
+                  <textarea
+                    id="clinical-observations"
+                    value={clinicalForm.observations}
+                    onChange={(event) =>
+                      updateClinicalField('observations', event.target.value)
+                    }
+                    placeholder="Ej. Requiere control mensual de presión."
+                    rows={3}
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="clinical-medications"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    Medicamentos{' '}
+                    <span className="font-normal text-slate-400">
+                      (uno por línea)
+                    </span>
+                  </label>
+                  <textarea
+                    id="clinical-medications"
+                    value={clinicalForm.medicationsText}
+                    onChange={(event) =>
+                      updateClinicalField('medicationsText', event.target.value)
+                    }
+                    placeholder={'Atorvastatina 10 mg\nMetoprolol 50 mg cada 12 h'}
+                    rows={3}
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                  />
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
+                    <Pill className="size-3.5" aria-hidden="true" />
+                    Cada línea se guarda como un texto plano en `medications`.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-800">
+                    Contacto de emergencia
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <input
+                      value={clinicalForm.emergencyContactName}
+                      onChange={(event) =>
+                        updateClinicalField(
+                          'emergencyContactName',
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Nombre del contacto"
+                      aria-label="Nombre del contacto de emergencia"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    />
+                    <select
+                      value={clinicalForm.emergencyRelationship}
+                      onChange={(event) =>
+                        updateClinicalField(
+                          'emergencyRelationship',
+                          event.target.value as Relationship,
+                        )
+                      }
+                      aria-label="Parentesco del contacto"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    >
+                      {relationshipOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={clinicalForm.emergencyPhone}
+                      onChange={(event) =>
+                        updateClinicalField('emergencyPhone', event.target.value)
+                      }
+                      placeholder="Teléfono +52 55 0000 0000"
+                      aria-label="Teléfono del contacto de emergencia"
+                      type="tel"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    />
+                    <input
+                      value={clinicalForm.emergencyEmail}
+                      onChange={(event) =>
+                        updateClinicalField('emergencyEmail', event.target.value)
+                      }
+                      placeholder="Correo del contacto"
+                      aria-label="Correo del contacto de emergencia"
+                      type="email"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={clinicalSaving}
+                  onClick={() => void handleClinicalSave()}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save className="size-4" aria-hidden="true" />
+                  {clinicalSaving ? 'Guardando…' : 'Guardar Información Clínica'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

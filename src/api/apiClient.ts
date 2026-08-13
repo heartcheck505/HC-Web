@@ -37,6 +37,8 @@ import type {
 import type {
   MeasurementReading,
   MeasurementSubmission,
+  RiskAssessment,
+  RiskLevel,
 } from '../types/measurement.types'
 import type { AppNotification } from '../types/notification.types'
 import type {
@@ -414,6 +416,56 @@ export function normalizePatientMe(
 }
 
 /**
+ * Normaliza el `riskLevel` del modelo de ML a un vocabulario único. Acepta
+ * variantes en español e inglés (`bajo`/`low`, `medio`/`medium`/`moderate`,
+ * `alto`/`high`, `critico`/`critical`). Devuelve `null` ante valores
+ * desconocidos o ausentes.
+ */
+export function normalizeRiskLevel(value: unknown): RiskLevel | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'bajo' || normalized === 'low') {
+    return 'bajo'
+  }
+  if (
+    normalized === 'medio' ||
+    normalized === 'medium' ||
+    normalized === 'moderate' ||
+    normalized === 'moderado'
+  ) {
+    return 'medio'
+  }
+  if (normalized === 'alto' || normalized === 'high') {
+    return 'alto'
+  }
+  if (normalized === 'critico' || normalized === 'critical') {
+    return 'critico'
+  }
+  return null
+}
+
+/**
+ * Mapea el objeto `riskAssessment` crudo del backend al modelo tipado. Si el
+ * objeto no es un objeto válido (o viene `null`), devuelve `null` para que la
+ * UI degrade al estado "Evaluando tendencias..." sin romper.
+ */
+export function normalizeRiskAssessment(value: unknown): RiskAssessment | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+  const raw = value as Record<string, unknown>
+  const score = toNumberOrNull(raw.score)
+  const riskLevel = normalizeRiskLevel(raw.riskLevel)
+  const recommendation = asString(raw.recommendation)
+  if (riskLevel === null && score === null && recommendation === null) {
+    return null
+  }
+  return { riskLevel, score, recommendation }
+}
+
+/**
  * Normaliza el payload de autenticación del backend (o un login local) a un
  * `UserDto` persistible en `sessionStorage`.
  *
@@ -712,6 +764,11 @@ export interface PatientMeUpdateInput {
   emergencyContactName?: PatientMeRequest['emergencyContactName']
   emergencyContactPhone?: PatientMeRequest['emergencyContactPhone']
   address?: PatientMeRequest['address']
+  initialDiagnosis?: PatientMeRequest['initialDiagnosis']
+  assignedDoctor?: PatientMeRequest['assignedDoctor']
+  observations?: PatientMeRequest['observations']
+  medications?: PatientMeRequest['medications']
+  emergencyContacts?: PatientMeRequest['emergencyContacts']
 }
 
 export function buildPatientMePayload(
@@ -730,6 +787,21 @@ export function buildPatientMePayload(
     emergencyContactName: input.emergencyContactName ?? null,
     emergencyContactPhone: input.emergencyContactPhone ?? null,
     address: input.address ?? null,
+    initialDiagnosis: input.initialDiagnosis ?? null,
+    assignedDoctor: input.assignedDoctor ?? null,
+    observations: input.observations ?? null,
+    medications:
+      input.medications === undefined ? null : toStringArray(input.medications),
+    emergencyContacts:
+      input.emergencyContacts == null
+        ? null
+        : input.emergencyContacts.map((contact) => ({
+            name: asString(contact?.name) ?? '',
+            relationship: asString(contact?.relationship) ?? '',
+            phone: asString(contact?.phone) ?? '',
+            email: asString(contact?.email),
+            isPrimary: contact?.isPrimary === true,
+          })),
   }
 }
 
@@ -781,17 +853,45 @@ export async function registerDevice(
 
 export async function createMeasurement(
   payload: MeasurementSubmission,
-): Promise<unknown> {
-  return apiClient.post<unknown>(API_ENDPOINTS.measurements.create, payload)
+): Promise<MeasurementReading | null> {
+  const measurement = await apiClient.post<MeasurementReading | null>(
+    API_ENDPOINTS.measurements.create,
+    payload,
+  )
+  if (typeof measurement !== 'object' || measurement === null) {
+    return null
+  }
+  return normalizeMeasurementReading(measurement)
+}
+
+/**
+ * Mapea una medición cruda del backend al modelo exacto de la UI, incluido
+ * el objeto `riskAssessment` del modelo de Machine Learning (null-safe).
+ */
+export function normalizeMeasurementReading(
+  reading: MeasurementReading,
+): MeasurementReading {
+  return {
+    timestamp: typeof reading?.timestamp === 'string' ? reading.timestamp : '',
+    deviceId: typeof reading?.deviceId === 'string' ? reading.deviceId : '',
+    bpm: toNumberOrNull(reading?.bpm) ?? 0,
+    quality: asString(reading?.quality),
+    context: asString(reading?.context),
+    isNormal: reading?.isNormal === true,
+    notes: asString(reading?.notes),
+    symptoms: toStringArray(reading?.symptoms),
+    riskAssessment: normalizeRiskAssessment(reading?.riskAssessment),
+  }
 }
 
 /**
  * Lecturas exactas de `GET /api/measurements` con el modelo
- * `{ timestamp, deviceId, bpm, quality, context, isNormal, notes, symptoms }`.
- * Acepta `from`/`to` (ISO 8601) para acotar el período consultado. Cada
- * lectura se mapea al modelo exacto y se degradan los campos nulos/ausentes
- * (`symptoms` → `[]`, `quality`/`context`/`notes` → `null`) para que ninguna
- * gráfica o lista rompa con respuestas incompletas.
+ * `{ timestamp, deviceId, bpm, quality, context, isNormal, notes, symptoms,
+ * riskAssessment }`. Acepta `from`/`to` (ISO 8601) para acotar el período
+ * consultado. Cada lectura se mapea al modelo exacto y se degradan los campos
+ * nulos/ausentes (`symptoms` → `[]`, `quality`/`context`/`notes` → `null`,
+ * `riskAssessment` → `null`) para que ninguna gráfica o lista rompa con
+ * respuestas incompletas.
  */
 export async function getMeasurements(
   from?: string,
@@ -811,16 +911,7 @@ export async function getMeasurements(
   if (!Array.isArray(readings)) {
     return []
   }
-  return readings.map((reading) => ({
-    timestamp: typeof reading?.timestamp === 'string' ? reading.timestamp : '',
-    deviceId: typeof reading?.deviceId === 'string' ? reading.deviceId : '',
-    bpm: toNumberOrNull(reading?.bpm) ?? 0,
-    quality: asString(reading?.quality),
-    context: asString(reading?.context),
-    isNormal: reading?.isNormal === true,
-    notes: asString(reading?.notes),
-    symptoms: toStringArray(reading?.symptoms),
-  }))
+  return readings.map(normalizeMeasurementReading)
 }
 
 export async function getNotifications(): Promise<AppNotification[]> {

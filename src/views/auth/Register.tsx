@@ -308,10 +308,12 @@ export default function Register() {
           emergencyContactName: storedEmergencyContactName,
           emergencyContactPhone: storedEmergencyContactPhone,
         })
-        navigate(
-          sessionPlan === 'premium' ? '/dashboard-premium' : '/dashboard',
-          { replace: true },
-        )
+        // Redirige al perfil de salud con el banner "Completar Información
+        // Clínica" para que el registro no pierda el paso de datos médicos.
+        navigate('/pacientes', {
+          replace: true,
+          state: { registrationComplete: true },
+        })
       } else {
         navigate('/auth/login', { replace: true, state: { registered: true } })
       }
