@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  API_BASE_URL,
   API_ENDPOINTS,
   NO_PATIENT_LABEL,
   apiClient,
@@ -1125,7 +1126,10 @@ describe('login: POST /auth/login', () => {
       password: 'secret123',
       platform: 'Web',
     })
-    expect(capturedUrl).toBe('/api/auth/login')
+    expect(capturedUrl).toBe(`${API_BASE_URL}/auth/login`)
+    expect(capturedUrl.startsWith('http://heartcheckapi.runasp.net/api')).toBe(
+      true,
+    )
     expect(capturedInit?.method).toBe('POST')
     const headers = capturedInit?.headers as Headers
     expect(headers.get('Content-Type')).toBe('application/json')
