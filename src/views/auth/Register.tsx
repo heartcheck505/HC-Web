@@ -4,7 +4,6 @@ import type {
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
-  TextareaHTMLAttributes,
 } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -20,12 +19,7 @@ import {
   MapPin,
   Phone,
   PhoneCall,
-  Pill,
-  Plus,
   Ruler,
-  Stethoscope,
-  StickyNote,
-  Trash2,
   User,
   Users,
   Weight,
@@ -61,18 +55,18 @@ const bloodTypes: BloodGroup[] = [
   'AB-',
 ]
 
+const genders: { value: string; label: string }[] = [
+  { value: 'Male', label: 'Masculino' },
+  { value: 'Female', label: 'Femenino' },
+  { value: 'Other', label: 'Otro' },
+]
+
 const relationships: { value: Relationship; label: string }[] = [
   { value: 'spouse', label: 'Cónyuge / Pareja' },
   { value: 'hijo/a', label: 'Hijo/a' },
   { value: 'padre/madre', label: 'Padre / Madre' },
   { value: 'otro', label: 'Otro' },
 ]
-
-function createMedicationId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `med-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
 
 function parseNumberOrNull(value: string): number | null {
   const normalized = value.trim().replace(',', '.')
@@ -147,18 +141,6 @@ function Select({ children, ...rest }: SelectProps) {
   )
 }
 
-interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {}
-
-function TextArea({ ...rest }: TextAreaProps) {
-  return (
-    <textarea
-      {...rest}
-      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-      rows={3}
-    />
-  )
-}
-
 interface SectionCardProps {
   icon: LucideIcon
   title: string
@@ -177,14 +159,6 @@ function SectionCard({ icon: Icon, title, children }: SectionCardProps) {
       <div className="mt-4">{children}</div>
     </section>
   )
-}
-
-interface MedicationRow {
-  id: string
-  name: string
-  dosage: string
-  frequency: string
-  time: string
 }
 
 interface FormErrors {
@@ -208,76 +182,35 @@ export default function Register() {
 
   const [caregiverName, setCaregiverName] = useState('')
   const [patientName, setPatientName] = useState('')
-  const [patientSecondLastName, setPatientSecondLastName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
+  const [gender, setGender] = useState('Male')
   const [age, setAge] = useState('')
   const [weight, setWeight] = useState('')
   const [height, setHeight] = useState('')
   const [address, setAddress] = useState('')
   const [bloodType, setBloodType] = useState<BloodGroup>('O+')
-  const [observations, setObservations] = useState('')
-
-  const [diagnosis, setDiagnosis] = useState('')
-  const [physician, setPhysician] = useState('')
 
   const [emergencyName, setEmergencyName] = useState('')
   const [emergencyRelationship, setEmergencyRelationship] =
     useState<Relationship>('otro')
   const [emergencyPhone, setEmergencyPhone] = useState('')
   const [emergencyEmail, setEmergencyEmail] = useState('')
-  const [isPrimaryContact, setIsPrimaryContact] = useState(true)
-
-  const [medications, setMedications] = useState<MedicationRow[]>([
-    {
-      id: createMedicationId(),
-      name: 'Enalapril',
-      dosage: '10mg',
-      frequency: 'Cada 12h',
-      time: '8:00 AM',
-    },
-  ])
 
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitting, setSubmitting] = useState(false)
 
-  const addMedication = (): void => {
-    setMedications((current) => [
-      ...current,
-      {
-        id: createMedicationId(),
-        name: '',
-        dosage: '',
-        frequency: '',
-        time: '',
-      },
-    ])
-  }
-
-  const updateMedication = (
-    id: string,
-    key: keyof MedicationRow,
-    value: string,
-  ): void => {
-    setMedications((current) =>
-      current.map((medication) =>
-        medication.id === id ? { ...medication, [key]: value } : medication,
-      ),
-    )
-  }
-
-  const removeMedication = (id: string): void => {
-    setMedications((current) => current.filter((medication) => medication.id !== id))
-  }
-
   const validate = (): FormErrors => {
     const next: FormErrors = {}
     if (!caregiverName.trim()) {
       next.caregiverName = 'Ingrese el nombre del cuidador.'
+    }
+    if (!patientName.trim()) {
+      next.patientName = 'Ingrese el nombre del paciente.'
     }
     if (!email.trim()) {
       next.email = 'El correo electrónico es obligatorio.'
@@ -318,14 +251,26 @@ export default function Register() {
 
     setSubmitting(true)
     try {
-      const nameParts = caregiverName.trim().split(' ')
+      // Payload exacto de POST /api/auth/register: firstName/lastName son los
+      // del cuidador/usuario; el resto de los campos del paciente viajan como
+      // perfil clínico plano.
+      const caregiverNameParts = caregiverName.trim().split(' ')
       const payload: RegisterRequest = {
         email: email.trim(),
         password,
-        firstName: nameParts[0] || caregiverName.trim(),
-        lastName: nameParts.slice(1).join(' '),
-        secondLastName: patientSecondLastName.trim() || undefined,
+        firstName: caregiverNameParts[0] || caregiverName.trim(),
+        lastName: caregiverNameParts.slice(1).join(' '),
         phone: phone.trim(),
+        age: parseNumberOrNull(age),
+        gender,
+        weight: parseNumberOrNull(weight),
+        height: parseNumberOrNull(height),
+        bloodType,
+        address: address.trim() || null,
+        emergencyContactName: emergencyName.trim() || null,
+        emergencyRelationship,
+        emergencyPhone: emergencyPhone.trim() || null,
+        emergencyEmail: emergencyEmail.trim() || null,
       }
 
       const response = await apiClient.post<RegisterResponse>(
@@ -336,7 +281,6 @@ export default function Register() {
 
       if (response?.token) {
         tokenStorage.set(response.token)
-        const patientNameParts = patientName.trim().split(' ').filter(Boolean)
         const sessionUser = normalizeStoredUser(response) ?? {
           id: 'local-user',
           firstName: payload.firstName,
@@ -350,6 +294,7 @@ export default function Register() {
         // el respaldo por usuario en `localStorage`. El contacto de emergencia
         // se guarda explícitamente tanto en el perfil del cuidador como en el
         // paciente para que el dashboard lo muestre desde el primer segundo.
+        const patientNameParts = patientName.trim().split(' ').filter(Boolean)
         const storedEmergencyContactName = emergencyName.trim() || null
         const storedEmergencyContactPhone = emergencyPhone.trim() || null
         setStoredUser({
@@ -360,7 +305,6 @@ export default function Register() {
         setStoredPatient({
           firstName: patientNameParts[0] ?? '',
           lastName: patientNameParts.slice(1).join(' ') || '',
-          secondLastName: patientSecondLastName.trim() || undefined,
           emergencyContactName: storedEmergencyContactName,
           emergencyContactPhone: storedEmergencyContactPhone,
         })
@@ -381,9 +325,6 @@ export default function Register() {
       setSubmitting(false)
     }
   }
-
-  const medInputClass =
-    'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600/20'
 
   return (
     <div className="min-h-screen bg-white lg:grid lg:grid-cols-2">
@@ -445,24 +386,23 @@ export default function Register() {
         >
           <SectionCard icon={User} title="Datos del Cuidador y Paciente">
             <div className="space-y-4">
-              <FormField
-                htmlFor="caregiverName"
-                label="Nombre del Cuidador"
-                error={errors.caregiverName}
-              >
-                <IconInput
-                  id="caregiverName"
-                  icon={User}
-                  value={caregiverName}
-                  onChange={(event) => setCaregiverName(event.target.value)}
-                  placeholder="Ej. Nombre Apellido"
-                />
-              </FormField>
-
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
+                  htmlFor="caregiverName"
+                  label="Nombre del Cuidador"
+                  error={errors.caregiverName}
+                >
+                  <IconInput
+                    id="caregiverName"
+                    icon={User}
+                    value={caregiverName}
+                    onChange={(event) => setCaregiverName(event.target.value)}
+                    placeholder="Ej. Nombre Apellido"
+                  />
+                </FormField>
+                <FormField
                   htmlFor="patientName"
-                  label="Nombre y Apellido Paterno del Paciente"
+                  label="Nombre del Paciente"
                   error={errors.patientName}
                 >
                   <IconInput
@@ -471,15 +411,6 @@ export default function Register() {
                     value={patientName}
                     onChange={(event) => setPatientName(event.target.value)}
                     placeholder="Ej. Nombre Apellido"
-                  />
-                </FormField>
-                <FormField htmlFor="patientSecondLastName" label="Segundo Apellido">
-                  <IconInput
-                    id="patientSecondLastName"
-                    icon={Users}
-                    value={patientSecondLastName}
-                    onChange={(event) => setPatientSecondLastName(event.target.value)}
-                    placeholder="Ej. Segundo apellido"
                   />
                 </FormField>
               </div>
@@ -540,7 +471,20 @@ export default function Register() {
           </SectionCard>
 
           <SectionCard icon={Activity} title="Métricas Físicas y Perfil Clínico">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <FormField htmlFor="gender" label="Género">
+                <Select
+                  id="gender"
+                  value={gender}
+                  onChange={(event) => setGender(event.target.value)}
+                >
+                  {genders.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
               <FormField htmlFor="age" label="Edad" error={errors.age}>
                 <IconInput
                   id="age"
@@ -580,18 +524,6 @@ export default function Register() {
               </FormField>
             </div>
 
-            <div className="mt-4">
-              <FormField htmlFor="address" label="Dirección">
-                <IconInput
-                  id="address"
-                  icon={MapPin}
-                  value={address}
-                  onChange={(event) => setAddress(event.target.value)}
-                  placeholder="Av. Ejemplo 123, Ciudad"
-                />
-              </FormField>
-            </div>
-
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <FormField htmlFor="bloodType" label="Tipo de Sangre">
                 <Select
@@ -606,35 +538,13 @@ export default function Register() {
                   ))}
                 </Select>
               </FormField>
-              <FormField htmlFor="observations" label="Observaciones / Notas de Salud">
-                <TextArea
-                  id="observations"
-                  value={observations}
-                  onChange={(event) => setObservations(event.target.value)}
-                  placeholder="Ej. Peso reducido a 76kg tras seguimiento nutricional"
-                />
-              </FormField>
-            </div>
-          </SectionCard>
-
-          <SectionCard icon={Stethoscope} title="Información Médica y Tratante">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField htmlFor="diagnosis" label="Diagnóstico Inicial">
+              <FormField htmlFor="address" label="Dirección">
                 <IconInput
-                  id="diagnosis"
-                  icon={StickyNote}
-                  value={diagnosis}
-                  onChange={(event) => setDiagnosis(event.target.value)}
-                  placeholder="Sin información / Diagnóstico preventivo"
-                />
-              </FormField>
-              <FormField htmlFor="physician" label="Médico Tratante / Asignado">
-                <IconInput
-                  id="physician"
-                  icon={User}
-                  value={physician}
-                  onChange={(event) => setPhysician(event.target.value)}
-                  placeholder="Ej. Dr. Nombre Apellido (o Sin doctor asignado)"
+                  id="address"
+                  icon={MapPin}
+                  value={address}
+                  onChange={(event) => setAddress(event.target.value)}
+                  placeholder="Av. Ejemplo 123, Ciudad"
                 />
               </FormField>
             </div>
@@ -687,89 +597,6 @@ export default function Register() {
                 />
               </FormField>
             </div>
-
-            <label className="mt-4 flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={isPrimaryContact}
-                onChange={(event) => setIsPrimaryContact(event.target.checked)}
-                className="size-4 rounded border-slate-300 accent-blue-600"
-              />
-              <span className="text-sm text-slate-600">
-                Establecer como contacto principal de emergencia
-              </span>
-            </label>
-          </SectionCard>
-
-          <SectionCard icon={Pill} title="Medicamentos del Paciente">
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div className="hidden gap-3 border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs font-semibold uppercase text-slate-500 sm:grid sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-                <span>Nombre</span>
-                <span>Dosis</span>
-                <span>Frecuencia</span>
-                <span>Horas</span>
-                <span className="text-right">Acciones</span>
-              </div>
-              {medications.map((medication) => (
-                <div
-                  key={medication.id}
-                  className="grid grid-cols-2 gap-3 border-b border-slate-100 px-3 py-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto] sm:last:border-0"
-                >
-                  <input
-                    value={medication.name}
-                    onChange={(event) =>
-                      updateMedication(medication.id, 'name', event.target.value)
-                    }
-                    placeholder="Nombre"
-                    aria-label="Nombre del medicamento"
-                    className={medInputClass}
-                  />
-                  <input
-                    value={medication.dosage}
-                    onChange={(event) =>
-                      updateMedication(medication.id, 'dosage', event.target.value)
-                    }
-                    placeholder="Dosis"
-                    aria-label="Dosis"
-                    className={medInputClass}
-                  />
-                  <input
-                    value={medication.frequency}
-                    onChange={(event) =>
-                      updateMedication(medication.id, 'frequency', event.target.value)
-                    }
-                    placeholder="Frecuencia"
-                    aria-label="Frecuencia"
-                    className={medInputClass}
-                  />
-                  <input
-                    value={medication.time}
-                    onChange={(event) =>
-                      updateMedication(medication.id, 'time', event.target.value)
-                    }
-                    placeholder="Horas"
-                    aria-label="Horas"
-                    className={medInputClass}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeMedication(medication.id)}
-                    aria-label={`Eliminar ${medication.name || 'medicamento'}`}
-                    className="col-span-2 justify-self-start rounded-lg p-2 text-rose-500 transition-colors hover:bg-rose-50 sm:col-span-1 sm:justify-self-center"
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={addMedication}
-              className="mt-3 inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
-            >
-              <Plus className="size-4" aria-hidden="true" />
-              Agregar Medicamento
-            </button>
           </SectionCard>
 
           <label className="flex cursor-pointer items-start gap-3">

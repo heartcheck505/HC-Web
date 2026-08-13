@@ -11,13 +11,28 @@ export interface LoginRequest {
   platform?: LoginPlatform
 }
 
+/**
+ * Payload exacto de `POST /api/auth/register`. `firstName`/`lastName` son
+ * los del cuidador/usuario; el nombre del paciente viaja únicamente en
+ * `age`, `gender`, `weight`, `height` (perfil clínico) y se persiste en la
+ * sesión local del navegador.
+ */
 export interface RegisterRequest {
   email: string
   password: string
   firstName: string
   lastName: string
-  secondLastName?: string
   phone: string
+  age?: number | null
+  gender?: string | null
+  weight?: number | null
+  height?: number | null
+  bloodType?: string | null
+  address?: string | null
+  emergencyContactName?: string | null
+  emergencyRelationship?: string | null
+  emergencyPhone?: string | null
+  emergencyEmail?: string | null
 }
 
 export type BloodGroup = 'O+' | 'O-' | 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-'
