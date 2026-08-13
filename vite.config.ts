@@ -44,10 +44,16 @@ export default defineConfig({
       '/api': {
         target:
           process.env.HEARTCHECK_API_PROXY_TARGET ??
-          'https://heartcheckapi.runasp.net',
+          'http://heartcheckapi.runasp.net',
         changeOrigin: true,
         // El destino puede ser HTTP local o HTTPS con certificado no confiable.
         secure: false,
+        // IIS/ASP.NET resetea la conexión (ECONNRESET) si el Host Header del
+        // proxy no coincide con el host del sitio virtual: se fuerza el Host
+        // del backend en las peticiones salientes.
+        headers: { Host: 'heartcheckapi.runasp.net' },
+        // La ruta se reenvía tal cual (/api/auth/login → <target>/api/auth/login).
+        rewrite: (path) => path,
       },
     },
   },

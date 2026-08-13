@@ -6,8 +6,11 @@
  *   `sessionStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
  * - La URL base es siempre relativa: `import.meta.env.VITE_API_BASE_URL` si
- *   está definida, o `/api` por defecto. En desarrollo el proxy de
- *   `vite.config.ts` redirige `/api` al backend sin disparar CORS; en
+ *   está definida, o `/api` por defecto. En desarrollo `/api` se reenvía al
+ *   backend (`http://heartcheckapi.runasp.net`) por el proxy de
+ *   `vite.config.ts`, lo que evita CORS y los resets de conexión
+ *   (ECONNRESET) por discrepancias de Host Header. Si no se usa proxy, se
+ *   debe apuntar directamente a `http://heartcheckapi.runasp.net/api`; en
  *   producción (Render/HTTPS) las peticiones al mismo origen evitan errores
  *   de Mixed Content al no mezclar `https://` con `http://`.
  *   `VITE_API_BASE_URL` solo debe apuntar a una URL absoluta cuando el
@@ -554,15 +557,31 @@ function parseError(status: number, payload: unknown): ApiError {
   if (payload && typeof payload === 'object') {
     const body = payload as AuthErrorResponse
     const title = (payload as { title?: unknown }).title
-    const message =
-      typeof body.message === 'string'
-        ? body.message
-        : typeof title === 'string'
-          ? title
-          : fallback
+    const detail = (payload as { detail?: unknown }).detail
     const errors =
       body.errors && typeof body.errors === 'object' ? body.errors : undefined
+    // Validación de ASP.NET: `errors` es un diccionario campo → mensajes.
+    if (errors && Object.keys(errors).length > 0) {
+      const firstKey = Object.keys(errors)[0]
+      const firstDetail = errors[firstKey]?.[0]
+      if (typeof firstDetail === 'string' && firstDetail.trim() !== '') {
+        return new ApiError({ status, message: firstDetail, errors })
+      }
+    }
+    const message =
+      typeof body.message === 'string' && body.message.trim() !== ''
+        ? body.message
+        : typeof detail === 'string' && detail.trim() !== ''
+          ? detail
+          : typeof title === 'string' && title.trim() !== ''
+            ? title
+            : fallback
     return new ApiError({ status, message, errors })
+  }
+  // Cuerpos de texto plano o HTML (p. ej. páginas de error del servidor).
+  if (typeof payload === 'string' && payload.trim() !== '') {
+    const snippet = payload.trim().slice(0, 300)
+    return new ApiError({ status, message: snippet })
   }
   return new ApiError({ status, message: fallback })
 }
@@ -618,8 +637,24 @@ async function request<T>(
   }
 
   const contentType = response.headers.get('content-type') ?? ''
-  const isJson = contentType.includes('application/json')
-  const payload = isJson && response.status !== 204 ? await response.json() : null
+  // `application/problem+json` es el content-type de Problem Details (ASP.NET).
+  const isJson = contentType.includes('json')
+  let payload: unknown = null
+  if (response.status !== 204) {
+    try {
+      payload = isJson ? await response.json() : await response.text()
+    } catch {
+      // Content-Type JSON con cuerpo no parseable (p. ej. HTML de un proxy):
+      // se intenta leer como texto para no perder el mensaje del servidor.
+      if (isJson) {
+        try {
+          payload = await response.text()
+        } catch {
+          payload = null
+        }
+      }
+    }
+  }
 
   if (!response.ok) {
     throw parseError(response.status, payload)

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   API_ENDPOINTS,
   NO_PATIENT_LABEL,
+  apiClient,
   backupPatientToLocal,
   buildPatientMePayload,
   clearSession,
@@ -905,5 +906,162 @@ describe('getDailyStatistics', () => {
         abnormalMeasurements: 0,
       },
     ])
+  })
+})
+
+describe('login: POST /auth/login', () => {
+  it('envía las credenciales y platform Web con Content-Type application/json', async () => {
+    setStoredToken('jwt-test')
+    let capturedUrl = ''
+    let capturedInit: RequestInit | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string, init: RequestInit) => {
+        capturedUrl = url
+        capturedInit = init
+        return Promise.resolve(
+          okJsonResponse({ token: 'jwt-nuevo', user: { id: 'u1' } }),
+        )
+      }),
+    )
+    const response = await apiClient.post(API_ENDPOINTS.auth.login, {
+      email: 'ana@example.com',
+      password: 'secret123',
+      platform: 'Web',
+    })
+    expect(capturedUrl).toBe('/api/auth/login')
+    expect(capturedInit?.method).toBe('POST')
+    const headers = capturedInit?.headers as Headers
+    expect(headers.get('Content-Type')).toBe('application/json')
+    expect(JSON.parse(capturedInit?.body as string)).toEqual({
+      email: 'ana@example.com',
+      password: 'secret123',
+      platform: 'Web',
+    })
+    expect(response).toEqual({ token: 'jwt-nuevo', user: { id: 'u1' } })
+  })
+
+  it('expone el mensaje exacto del backend en errores JSON', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 400,
+        ok: false,
+        headers: { get: (): string => 'application/json' },
+        json: async (): Promise<unknown> => ({
+          message: 'Credenciales inválidas para esta cuenta.',
+        }),
+      }),
+    )
+    await expect(
+      apiClient.post(API_ENDPOINTS.auth.login, {
+        email: 'ana@example.com',
+        password: 'x',
+        platform: 'Web',
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Credenciales inválidas para esta cuenta.',
+    })
+  })
+
+  it('extrae el detalle de Problem Details cuando no hay message', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 500,
+        ok: false,
+        headers: { get: (): string => 'application/problem+json' },
+        json: async (): Promise<unknown> => ({
+          type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
+          title: 'Internal Server Error',
+          status: 500,
+          detail: 'No se pudo completar la autenticación.',
+        }),
+      }),
+    )
+    await expect(
+      apiClient.post(API_ENDPOINTS.auth.login, {
+        email: 'ana@example.com',
+        password: 'x',
+        platform: 'Web',
+      }),
+    ).rejects.toMatchObject({
+      status: 500,
+      message: 'No se pudo completar la autenticación.',
+    })
+  })
+
+  it('usa el primer error de validación del diccionario errors', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 400,
+        ok: false,
+        headers: { get: (): string => 'application/json' },
+        json: async (): Promise<unknown> => ({
+          title: 'One or more validation errors occurred.',
+          errors: {
+            password: ['La contraseña debe tener al menos 8 caracteres.'],
+          },
+        }),
+      }),
+    )
+    await expect(
+      apiClient.post(API_ENDPOINTS.auth.login, {
+        email: 'ana@example.com',
+        password: 'corta',
+        platform: 'Web',
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'La contraseña debe tener al menos 8 caracteres.',
+    })
+  })
+
+  it('expone el cuerpo de texto plano como mensaje', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 503,
+        ok: false,
+        headers: { get: (): string => 'text/plain' },
+        text: async (): Promise<string> => 'Service Unavailable',
+      }),
+    )
+    await expect(
+      apiClient.post(API_ENDPOINTS.auth.login, {
+        email: 'ana@example.com',
+        password: 'x',
+        platform: 'Web',
+      }),
+    ).rejects.toMatchObject({ status: 503, message: 'Service Unavailable' })
+  })
+
+  it('cae al mensaje genérico solo si el cuerpo no aporta nada', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 400,
+        ok: false,
+        headers: { get: (): string => 'application/json' },
+        json: async (): Promise<unknown> => ({ status: 400 }),
+      }),
+    )
+    await expect(
+      apiClient.post(API_ENDPOINTS.auth.login, {
+        email: 'ana@example.com',
+        password: 'x',
+        platform: 'Web',
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'No se pudo completar la operación. Intente nuevamente.',
+    })
   })
 })

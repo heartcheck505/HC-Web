@@ -48,6 +48,9 @@ export default function Login() {
   const [remember, setRemember] = useState(true)
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitting, setSubmitting] = useState(false)
+  // Error de red o del servidor que impide el login remoto; habilita el
+  // acceso local de prueba para no bloquear el flujo de desarrollo visual.
+  const [apiUnavailable, setApiUnavailable] = useState<string | null>(null)
 
   const validate = (): FormErrors => {
     const next: FormErrors = {}
@@ -62,6 +65,24 @@ export default function Login() {
     return next
   }
 
+  /**
+   * Acceso local de prueba: crea una sesión local a partir del correo
+   * ingresado (el nombre se deriva del local-part) y restaura el respaldo del
+   * paciente en `localStorage` si la cuenta ya se había registrado antes. No
+   * valida credenciales contra el servidor: es exclusivo para desarrollo
+   * cuando la API está inalcanzable o falla.
+   */
+  const handleLocalAccess = (): void => {
+    const sessionUser = normalizeStoredUser({ email: email.trim() })
+    if (!sessionUser) {
+      setErrors({ form: 'Ingrese un correo válido para el acceso local.' })
+      return
+    }
+    setStoredUser(sessionUser)
+    void restorePatientProfile()
+    navigate(explicitRedirect ?? '/dashboard', { replace: true })
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     const validation = validate()
@@ -71,6 +92,7 @@ export default function Login() {
     }
 
     setSubmitting(true)
+    setApiUnavailable(null)
     try {
       const payload: LoginRequest = {
         email: email.trim(),
@@ -105,12 +127,18 @@ export default function Login() {
       navigate(explicitRedirect ?? defaultRoute, { replace: true })
     } catch (error) {
       if (error instanceof ApiError) {
-        setErrors({
-          form:
-            error.status === 401
-              ? 'Credenciales incorrectas. Verifique su correo y contraseña.'
-              : error.message,
-        })
+        if (error.status === 401) {
+          setErrors({
+            form:
+              'Credenciales incorrectas. Verifique su correo y contraseña.',
+          })
+        } else if (error.status === 0 || error.status >= 500) {
+          // API inalcanzable o error del servidor: se muestra el mensaje y se
+          // ofrece el acceso local de prueba.
+          setApiUnavailable(error.message)
+        } else {
+          setErrors({ form: error.message })
+        }
       } else {
         setErrors({ form: 'Ocurrió un error inesperado. Intente nuevamente.' })
       }
@@ -169,6 +197,27 @@ export default function Login() {
               className="mt-6 rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800"
             >
               {errors.form}
+            </div>
+          )}
+
+          {apiUnavailable && (
+            <div
+              role="alert"
+              className="mt-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            >
+              <p className="font-medium">{apiUnavailable}</p>
+              <p className="mt-1 text-xs text-amber-700">
+                No se pudo llegar al servidor remoto. Puedes continuar con un
+                acceso local de prueba para explorar la interfaz; los datos
+                guardados en este dispositivo se restablecerán.
+              </p>
+              <button
+                type="button"
+                onClick={handleLocalAccess}
+                className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              >
+                Continuar en modo de prueba
+              </button>
             </div>
           )}
 
