@@ -6,16 +6,17 @@
  *   `sessionStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
  * - La URL base apunta directamente al backend de producción:
- *   `http://heartcheckapi.runasp.net/api` por defecto, sobreescribible con
- *   `import.meta.env.VITE_API_BASE_URL` (prioridad máxima, útil para apuntar
- *   a un HTTPS o a otro entorno). Nunca se usa una ruta relativa `/api` como
- *   base: todas las peticiones salen a la URL absoluta del backend
- *   (p. ej. `GET http://heartcheckapi.runasp.net/api/patients/me`), evitando
- *   así 404 cuando el frontend se sirve desde un servidor distinto al de la
- *   API (Render, Netlify, etc.). En local se puede conservar el proxy de
+ *   `http://heartcheckapi.runasp.net/api` por defecto. Se resuelve con esta
+ *   prioridad: `VITE_API_BASE_URL_HTTPS` (para forzar HTTPS desde Render y
+ *   evitar Mixed Content) → `VITE_API_BASE_URL` → default HTTP. El CSP de
+ *   `index.html` ya admite ambos esquemas (`connect-src` con http/https y
+ *   comodines `*.runasp.net`), por lo que ninguna petición se bloquea.
+ *   Nunca se usa una ruta relativa `/api` como base: todas las peticiones
+ *   salen a la URL absoluta del backend (p. ej.
+ *   `GET http://heartcheckapi.runasp.net/api/patients/me`), evitando 404
+ *   cuando el frontend se sirve desde un servidor distinto al de la API
+ *   (Render, Netlify, etc.). En local se puede conservar el proxy de
  *   `vite.config.ts` fijando `VITE_API_BASE_URL=/api`.
- * - Ante Mixed Content (frontend en HTTPS llamando a este HTTP), fijar
- *   `VITE_API_BASE_URL` a la URL HTTPS equivalente del backend.
  * - Cortocircuito de datos de prueba: cuando `shouldUseMockData()` es
  *   verdadero (sin token o `VITE_USE_MOCK_DATA=true`), ninguna petición
  *   `GET` sale a la red: se lanza un `ApiError` simulado (status 0) que los
@@ -52,7 +53,9 @@ import type { Plan, UserPlanSubscription } from '../types/plan.types'
 import type { DailyStatistic } from '../types/statistics.types'
 
 export const API_BASE_URL: string = (
-  import.meta.env.VITE_API_BASE_URL || 'http://heartcheckapi.runasp.net/api'
+  import.meta.env.VITE_API_BASE_URL_HTTPS ||
+  import.meta.env.VITE_API_BASE_URL ||
+  'http://heartcheckapi.runasp.net/api'
 ).replace(/\/+$/, '')
 
 const TOKEN_STORAGE_KEY = 'heartcheck.token'
