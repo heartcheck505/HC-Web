@@ -1155,6 +1155,23 @@ describe('login: POST /auth/login', () => {
     expect(fresh.API_BASE_URL.startsWith('http://')).toBe(false)
   })
 
+  it('usa la ruta relativa /api en producción cuando el host es onrender.com', async () => {
+    const renderWindow = {
+      ...fakeWindow,
+      location: {
+        ...fakeWindow.location,
+        protocol: 'https:',
+        host: 'heartcheck-web.onrender.com',
+      },
+    }
+    ;(globalThis as unknown as { window: typeof renderWindow }).window =
+      renderWindow
+    vi.resetModules()
+    const fresh = await import('./apiClient')
+    expect(fresh.API_BASE_URL).toBe('/api')
+    expect(fresh.API_BASE_URL.includes('http')).toBe(false)
+  })
+
   it('mantiene HTTP cuando el origen de la app es HTTP', async () => {
     vi.resetModules()
     const fresh = await import('./apiClient')

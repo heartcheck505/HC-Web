@@ -5,17 +5,15 @@
  * - El token JWT jamás se compromete en el código; se lee desde
  *   `sessionStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
- * - La URL base (`API_BASE_URL`) se resuelve en `resolveApiBaseUrl()`: con
- *   `VITE_API_BASE_URL_HTTPS` / `VITE_API_BASE_URL` como overrides, y sin
- *   variables se adapta al protocolo del origen de la app (HTTPS → API HTTPS,
- *   HTTP → API HTTP) para evitar el bloqueo de Mixed Content entre Render y
- *   runasp.net. Si Render reenvía `/api` por proxy, basta fijar
- *   `VITE_API_BASE_URL=/api` (ruta relativa, sin protocolo hardcodeado).
- *   La CSP (meta de `index.html` y la inyectada por `vite.config.ts`) no
- *   contiene `upgrade-insecure-requests` y admite `http://`, `https://` y
- *   comodines `*.runasp.net`, por lo que ninguna petición fetch se bloquea.
- *   En local se puede conservar el proxy de `vite.config.ts` con
- *   `VITE_API_BASE_URL=/api`.
+ * - La URL base (`API_BASE_URL`) se resuelve en `resolveApiBaseUrl()`: overrides
+ *   `VITE_API_BASE_URL_HTTPS` / `VITE_API_BASE_URL`; en Render
+ *   (`window.location.host` con `onrender.com`) usa la ruta relativa `/api`
+ *   (el servidor `server/index.mjs` reenvía `/api/*` al backend, ver
+ *   `render.yaml`); sin variables, el protocolo se adapta al origen de la app
+ *   (HTTPS → API HTTPS) para evitar Mixed Content. La CSP (meta de
+ *   `index.html` y la inyectada por `vite.config.ts`) no contiene
+ *   `upgrade-insecure-requests`, admite `'self'` (cubre `/api` relativo) y
+ *   `http://`/`https://` con comodines `*.runasp.net`.
  * - Cortocircuito de datos de prueba: cuando `shouldUseMockData()` es
  *   verdadero (sin token o `VITE_USE_MOCK_DATA=true`), ninguna petición
  *   `GET` sale a la red: se lanza un `ApiError` simulado (status 0) que los
@@ -58,10 +56,14 @@ import type { DailyStatistic } from '../types/statistics.types'
  * 2. `VITE_API_BASE_URL` — override explícito; admite una ruta relativa
  *    (`/api`) cuando Render/Vite/servidor proxy reenvía el mismo origen, o
  *    una URL absoluta.
- * 3. Sin variables: el protocolo se adapta al origen de la app para nunca
- *    mezclar HTTP/HTTPS. Si la web corre en HTTPS (Render), se usa
- *    `https://heartcheckapi.runasp.net/api` (evita el bloqueo de Mixed
- *    Content); si corre en HTTP (local), `http://heartcheckapi.runasp.net/api`.
+ * 3. Entorno Render (`window.location.host` termina en `onrender.com`):
+ *    ruta relativa `/api` — el servidor de producción (`server/index.mjs`,
+ *    ver `render.yaml`) reenvía `/api/*` a
+ *    `http://heartcheckapi.runasp.net/api/*` internamente, evitando llamadas
+ *    directas del navegador al dominio externo (ERR_CONNECTION_RESET /
+ *    ERR_TIMED_OUT / Mixed Content).
+ * 4. Sin variables: el protocolo se adapta al origen de la app para nunca
+ *    mezclar HTTP/HTTPS (HTTPS → `https://heartcheckapi.runasp.net/api`).
  */
 function resolveApiBaseUrl(): string {
   const explicitHttps = import.meta.env.VITE_API_BASE_URL_HTTPS
@@ -71,6 +73,17 @@ function resolveApiBaseUrl(): string {
   const explicit = import.meta.env.VITE_API_BASE_URL
   if (explicit) {
     return explicit.replace(/\/+$/, '')
+  }
+  try {
+    if (
+      typeof window !== 'undefined' &&
+      window.location &&
+      window.location.host.includes('onrender.com')
+    ) {
+      return '/api'
+    }
+  } catch {
+    // Sin acceso a window (SSR/tests): se continúa con el protocolo por defecto.
   }
   let protocol = 'http:'
   try {

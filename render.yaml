@@ -1,0 +1,22 @@
+# Heart-Check Web — despliegue en Render (servicio web Node).
+# El servidor `server/index.mjs` sirve el bundle estático y reenvía /api/*
+# a http://heartcheckapi.runasp.net/api/* internamente (sin llamadas del
+# navegador al dominio externo).
+services:
+  - type: web
+    name: heartcheck-web
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      # El cliente de API detecta el host onrender.com y usa la ruta relativa
+      # /api automáticamente; estas variables quedan disponibles por si se
+      # quiere forzar otro destino.
+      - key: VITE_API_BASE_URL
+        value: /api
+      - key: VITE_API_BASE_URL_HTTPS
+        sync: false
