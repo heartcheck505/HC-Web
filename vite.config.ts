@@ -9,11 +9,10 @@ const CSP_DIRECTIVES = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https://images.unsplash.com",
-  "connect-src 'self' https://heartcheckapi.runasp.net",
+  "connect-src 'self' http://heartcheckapi.runasp.net https://heartcheckapi.runasp.net http://*.runasp.net https://*.runasp.net ws: wss:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  'upgrade-insecure-requests',
 ].join('; ')
 
 // La CSP se inyecta solo en build para no interferir con el HMR de desarrollo.

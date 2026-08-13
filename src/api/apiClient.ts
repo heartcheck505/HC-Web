@@ -5,18 +5,19 @@
  * - El token JWT jamás se compromete en el código; se lee desde
  *   `sessionStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
- * - La URL base apunta directamente al backend de producción SIEMPRE en
- *   HTTPS: `https://heartcheckapi.runasp.net/api` por defecto, para evitar
- *   Mixed Content (petición HTTP insegura desde un sitio HTTPS). Se resuelve
- *   con esta prioridad: `VITE_API_BASE_URL_HTTPS` → `VITE_API_BASE_URL` →
- *   default HTTPS. El CSP de `index.html` admite ambos esquemas
- *   (`connect-src` con https/http y comodines `*.runasp.net`), por lo que
- *   ninguna petición se bloquea. Nunca se usa una ruta relativa `/api` como
- *   base: todas las peticiones salen a la URL absoluta del backend (p. ej.
- *   `GET https://heartcheckapi.runasp.net/api/patients/me`), evitando 404
- *   cuando el frontend se sirve desde un servidor distinto al de la API
- *   (Render, Netlify, etc.). En local se puede conservar el proxy de
- *   `vite.config.ts` fijando `VITE_API_BASE_URL=/api`.
+ * - La URL base apunta directamente al backend de producción en HTTP:
+ *   `http://heartcheckapi.runasp.net/api` por defecto, porque el servidor
+ *   runasp.net NO sirve HTTPS (ERR_CONNECTION_RESET). Prioridad de resolución:
+ *   `VITE_API_BASE_URL_HTTPS` (solo si algún día el backend expone HTTPS) →
+ *   `VITE_API_BASE_URL` → default HTTP. La CSP (meta de `index.html` y la
+ *   inyectada por `vite.config.ts` en build) NO contiene
+ *   `upgrade-insecure-requests` ni restringe el esquema: `connect-src` admite
+ *   `http://` y `https://` con comodines `*.runasp.net`, por lo que el
+ *   navegador jamás reescribe `http://` a `https://` (eso causaba el
+ *   ERR_CONNECTION_RESET). Nunca se usa una ruta relativa `/api` como base:
+ *   todas las peticiones salen a la URL absoluta del backend (p. ej.
+ *   `GET http://heartcheckapi.runasp.net/api/patients/me`). En local se puede
+ *   conservar el proxy de `vite.config.ts` fijando `VITE_API_BASE_URL=/api`.
  * - Cortocircuito de datos de prueba: cuando `shouldUseMockData()` es
  *   verdadero (sin token o `VITE_USE_MOCK_DATA=true`), ninguna petición
  *   `GET` sale a la red: se lanza un `ApiError` simulado (status 0) que los
@@ -55,7 +56,7 @@ import type { DailyStatistic } from '../types/statistics.types'
 export const API_BASE_URL: string = (
   import.meta.env.VITE_API_BASE_URL_HTTPS ||
   import.meta.env.VITE_API_BASE_URL ||
-  'https://heartcheckapi.runasp.net/api'
+  'http://heartcheckapi.runasp.net/api'
 ).replace(/\/+$/, '')
 
 const TOKEN_STORAGE_KEY = 'heartcheck.token'
