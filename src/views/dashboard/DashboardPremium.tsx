@@ -28,6 +28,7 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
+  getMeasurementHistory,
   getPatientMe,
   getStoredPatientDisplayName,
   getStoredUser,
@@ -36,9 +37,13 @@ import {
 } from '../../api/apiClient'
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
+import HeartRateTrendChart from '../../components/charts/HeartRateTrendChart'
 import type { Alert, AlertSeverity, AlertStatus, AlertType } from '../../types/alert.types'
 import type { Device } from '../../types/device.types'
-import type { Measurement } from '../../types/measurement.types'
+import type {
+  Measurement,
+  MeasurementHistoryItem,
+} from '../../types/measurement.types'
 import type { PagedResult } from '../../types/patient.types'
 
 function getFirstName(name: string | null | undefined): string {
@@ -207,9 +212,6 @@ const eventStatusStyles: Record<AlertStatus, { badge: string; label: string }> =
 
 const sleepPhaseLabels = ['Despierto', 'Ligero', 'Profundo', 'REM']
 
-// Patrón visual de onda derivado de la frecuencia cardíaca; no son datos fijos.
-const wavePattern = [30, 52, 42, 70, 48, 84, 58, 92, 50, 74, 44, 64, 36, 58, 30, 46]
-
 function formatEventTime(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) {
@@ -259,6 +261,9 @@ export default function DashboardPremium() {
   // telemetría real de la API o del reloj.
   const [device, setDevice] = useState<Device | null>(null)
   const [latestMeasurement, setLatestMeasurement] = useState<Measurement | null>(null)
+  const [measurementHistory, setMeasurementHistory] = useState<
+    MeasurementHistoryItem[]
+  >([])
   const [hrv, setHrv] = useState<number>(0)
   const [sleepScore, setSleepScore] = useState<number>(0)
   const [sleepTimeMinutes, setSleepTimeMinutes] = useState<number>(0)
@@ -334,35 +339,42 @@ export default function DashboardPremium() {
       apiClient.get<Measurement[] | PagedResult<Measurement>>(
         `${API_ENDPOINTS.measurements.list}?page=1&pageSize=1`,
       ),
+      getMeasurementHistory(),
       apiClient.get<Alert[] | PagedResult<Alert>>(
         `${API_ENDPOINTS.alerts.list}?pageSize=30`,
       ),
     ])
-      .then(([deviceResult, measurementResult, alertsResult]) => {
-        if (cancelled) {
-          return
-        }
-        if (deviceResult.status === 'fulfilled') {
-          setDevice(toArray(deviceResult.value)[0] ?? null)
-        }
-        if (measurementResult.status === 'fulfilled') {
-          const latest = toArray(measurementResult.value)[0] ?? null
-          setLatestMeasurement(latest)
-          // VFC y sueño: el backend aún no los expone; se mantienen en espera
-          // (0 / vacíos) hasta que la API o el reloj los reporte.
-          setHrv(0)
-          setSleepScore(0)
-          setSleepTimeMinutes(0)
-          setSleepPhases([])
-        }
-        if (alertsResult.status === 'fulfilled') {
-          setEvents(toArray(alertsResult.value))
-        }
-        // Puntaje de estabilidad y análisis predictivo: el backend aún no los
-        // expone; permanecen en espera ('--') hasta disponer del servicio.
-        setStabilityScore(null)
-        setAiAnalysis(null)
-      })
+      .then(
+        ([deviceResult, measurementResult, historyResult, alertsResult]) => {
+          if (cancelled) {
+            return
+          }
+          if (deviceResult.status === 'fulfilled') {
+            setDevice(toArray(deviceResult.value)[0] ?? null)
+          }
+          if (measurementResult.status === 'fulfilled') {
+            const latest = toArray(measurementResult.value)[0] ?? null
+            setLatestMeasurement(latest)
+            // VFC y sueño: el backend aún no los expone; se mantienen en espera
+            // (0 / vacíos) hasta que la API o el reloj los reporte.
+            setHrv(0)
+            setSleepScore(0)
+            setSleepTimeMinutes(0)
+            setSleepPhases([])
+          }
+          if (historyResult.status === 'fulfilled') {
+            // Historial real para la gráfica de tendencias.
+            setMeasurementHistory(historyResult.value)
+          }
+          if (alertsResult.status === 'fulfilled') {
+            setEvents(toArray(alertsResult.value))
+          }
+          // Puntaje de estabilidad y análisis predictivo: el backend aún no los
+          // expone; permanecen en espera ('--') hasta disponer del servicio.
+          setStabilityScore(null)
+          setAiAnalysis(null)
+        },
+      )
       .catch(() => {
         return
       })
@@ -388,12 +400,6 @@ export default function DashboardPremium() {
 
   const heartRate = latestMeasurement?.heartRate ?? 0
   const spo2 = latestMeasurement?.spo2 ?? 0
-  const waveBars =
-    heartRate > 0
-      ? wavePattern.map((height) =>
-          Math.max(8, Math.round(height * (heartRate / 80))),
-        )
-      : []
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -576,25 +582,9 @@ export default function DashboardPremium() {
                 {heartRateLabel(heartRate)}
               </StatusBadge>
             </div>
-            {waveBars.length > 0 ? (
-              <div
-                className="mt-5 flex h-16 items-end gap-1"
-                aria-label="Onda de frecuencia cardíaca"
-              >
-                {waveBars.map((height, index) => (
-                  <span
-                    key={`${index}-${height}`}
-                    className="flex-1 rounded-t bg-blue-500/70 transition-[height] duration-500"
-                    style={{ height: `${height}%` }}
-                    aria-hidden="true"
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="mt-5 flex h-16 items-center justify-center rounded-lg bg-slate-50 text-xs text-slate-400">
-                Esperando señal del reloj…
-              </div>
-            )}
+            <div className="mt-5">
+              <HeartRateTrendChart items={measurementHistory} />
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

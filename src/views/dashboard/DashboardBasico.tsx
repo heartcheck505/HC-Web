@@ -9,7 +9,6 @@ import {
   ClipboardList,
   Clock,
   Heart,
-  HeartPulse,
   Lock,
   MessageCircle,
   Phone,
@@ -22,6 +21,7 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
+  getMeasurementHistory,
   getPatientMe,
   getStoredEmergencyContact,
   getStoredPatientDisplayName,
@@ -34,8 +34,9 @@ import {
 import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import PlanChangeModal from '../../components/plan/PlanChangeModal'
+import HeartRateTrendChart from '../../components/charts/HeartRateTrendChart'
 import type { Device } from '../../types/device.types'
-import type { Measurement } from '../../types/measurement.types'
+import type { Measurement, MeasurementHistoryItem } from '../../types/measurement.types'
 import type { PagedResult } from '../../types/patient.types'
 
 function getFirstName(name: string | null | undefined): string {
@@ -78,27 +79,6 @@ function LogRow({ day, text, emoji, tone }: LogRowProps) {
   )
 }
 
-function DeviceVisual({ heartRate }: { heartRate: number }) {
-  return (
-    <div className="flex flex-col items-center">
-      <div className="h-12 w-14 rounded-t-xl bg-slate-600/80" aria-hidden="true" />
-      <div className="relative flex size-40 items-center justify-center rounded-[2.5rem] bg-gradient-to-br from-slate-700 to-slate-900 ring-4 ring-slate-600">
-        <div className="flex size-32 flex-col items-center justify-center rounded-[2rem] bg-black shadow-[0_0_60px_-12px_rgba(37,99,235,0.8)]">
-            <HeartPulse className="mt-1 size-10 text-slate-500" />
-            <span className="mt-1 text-[10px] font-semibold text-slate-400">
-              {heartRate} BPM
-          </span>
-        </div>
-        <span
-          className="absolute -right-1.5 top-1/2 h-10 w-1.5 -translate-y-1/2 rounded-full bg-slate-500"
-          aria-hidden="true"
-        />
-      </div>
-      <div className="h-12 w-14 rounded-b-xl bg-slate-600 dark:bg-slate-800" aria-hidden="true" />
-    </div>
-  )
-}
-
 export default function DashboardBasico() {
   const toastTimer = useRef<number | null>(null)
   const location = useLocation()
@@ -123,6 +103,9 @@ export default function DashboardBasico() {
   )
   const [device, setDevice] = useState<Device | null>(null)
   const [latestMeasurement, setLatestMeasurement] = useState<Measurement | null>(null)
+  const [measurementHistory, setMeasurementHistory] = useState<
+    MeasurementHistoryItem[]
+  >([])
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -169,7 +152,8 @@ export default function DashboardBasico() {
       apiClient.get<Measurement[] | PagedResult<Measurement>>(
         `${API_ENDPOINTS.measurements.list}?page=1&pageSize=1`,
       ),
-    ]).then(([deviceResult, measurementResult]) => {
+      getMeasurementHistory(),
+    ]).then(([deviceResult, measurementResult, historyResult]) => {
       if (cancelled) {
         return
       }
@@ -178,6 +162,10 @@ export default function DashboardBasico() {
       }
       if (measurementResult.status === 'fulfilled') {
         setLatestMeasurement(toArray(measurementResult.value)[0] ?? null)
+      }
+      if (historyResult.status === 'fulfilled') {
+        // Historial real para la gráfica de tendencias.
+        setMeasurementHistory(historyResult.value)
       }
     })
     return () => {
@@ -461,8 +449,18 @@ export default function DashboardBasico() {
               </span>
             </div>
 
-            <div className="mt-6 flex items-center justify-center rounded-2xl bg-slate-950 py-10">
-              <DeviceVisual heartRate={latestMeasurement?.heartRate ?? 0} />
+            <div className="mt-6">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Frecuencia Cardíaca · Tendencias
+                </h4>
+                <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                  Últimos 10 registros
+                </span>
+              </div>
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4">
+                <HeartRateTrendChart items={measurementHistory} />
+              </div>
             </div>
 
             <ul className="mt-6 space-y-3 text-sm">
