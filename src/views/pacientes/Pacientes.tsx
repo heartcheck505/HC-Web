@@ -294,6 +294,9 @@ export default function Pacientes() {
         .map((item) => item.trim())
         .filter((item) => item !== '')
       const updated = await updatePatientMe({
+        // El backend valida `Id` como requerido en PUT /api/patients/me; se
+        // envía el id que GET devolvió y, si no existiera, el cliente lo omite.
+        id: profile.id ?? null,
         firstName: profile.firstName,
         lastName: profile.lastName,
         phone: profile.phone,
@@ -1013,7 +1016,7 @@ export default function Pacientes() {
                     Información Clínica
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Se guarda con PUT /api/patients/me
+                    Actualiza tu expediente clínico y contactos de emergencia.
                   </p>
                 </div>
               </div>

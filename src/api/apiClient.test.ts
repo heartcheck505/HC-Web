@@ -476,6 +476,35 @@ describe('buildPatientMePayload', () => {
       { name: '', relationship: '', phone: '', email: null, isPrimary: false },
     ])
   })
+
+  it('incluye id en el payload solo cuando GET lo devolvió (nunca vacío o null)', () => {
+    const withId = buildPatientMePayload({
+      id: 'pat-123',
+      firstName: 'Juan',
+      lastName: 'García',
+    })
+    expect(withId.id).toBe('pat-123')
+
+    const withoutId = buildPatientMePayload({
+      firstName: 'Juan',
+      lastName: 'García',
+    })
+    expect('id' in withoutId).toBe(false)
+
+    const nullId = buildPatientMePayload({
+      id: null,
+      firstName: 'Juan',
+      lastName: 'García',
+    })
+    expect('id' in nullId).toBe(false)
+
+    const blankId = buildPatientMePayload({
+      id: '   ',
+      firstName: 'Juan',
+      lastName: 'García',
+    })
+    expect('id' in blankId).toBe(false)
+  })
 })
 
 describe('riskAssessment del modelo de ML', () => {

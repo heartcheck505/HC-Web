@@ -754,6 +754,13 @@ export const apiClient = {
  * se concatenan y solo `firstName`/`lastName` viajan al backend.
  */
 export interface PatientMeUpdateInput {
+  /**
+   * Id del paciente tal como lo devolvió `GET /api/patients/me`. El backend
+   * (ASP.NET Core) valida el campo `Id` como requerido en `PUT`: si la UI lo
+   * tiene, viaja en el cuerpo; si no, el campo se omite por completo (nunca
+   * se envía un `id` vacío o `null`).
+   */
+  id?: string | null
   firstName: string
   lastName: string
   secondLastName?: string | null
@@ -777,7 +784,7 @@ export function buildPatientMePayload(
   const lastNameParts = [input.lastName, input.secondLastName].filter(
     (part): part is string => typeof part === 'string' && part.trim() !== '',
   )
-  return {
+  const payload: PatientMeRequest = {
     firstName: input.firstName.trim(),
     lastName: lastNameParts.join(' ').trim(),
     phone: input.phone ?? null,
@@ -803,6 +810,12 @@ export function buildPatientMePayload(
             isPrimary: contact?.isPrimary === true,
           })),
   }
+  // `Id` es requerido por la validación del backend en PUT /api/patients/me:
+  // solo se incluye cuando GET lo devolvió, nunca vacío ni null.
+  if (typeof input.id === 'string' && input.id.trim() !== '') {
+    payload.id = input.id.trim()
+  }
+  return payload
 }
 
 /**

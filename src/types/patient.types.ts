@@ -21,6 +21,12 @@ export interface EmergencyContact {
  * `lastName`; el frontend nunca envía `secondLastName`.
  */
 export interface PatientMeRequest {
+  /**
+   * Id del paciente. `GET /api/patients/me` lo devuelve; `PUT` lo exige como
+   * requerido (validación de ASP.NET Core). Si no está disponible, la UI omite
+   * el campo en lugar de enviar un `id` vacío o `null`.
+   */
+  id?: string | null
   firstName: string
   lastName: string
   phone?: string | null
