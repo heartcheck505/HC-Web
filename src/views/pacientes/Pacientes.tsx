@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Phone,
   Pill,
+  Plus,
   Save,
   Search,
   Star,
@@ -75,7 +76,8 @@ interface ClinicalFormState {
   initialDiagnosis: string
   assignedDoctor: string
   observations: string
-  medicationsText: string
+  medications: string[]
+  medicationDraft: string
   emergencyContactName: string
   emergencyRelationship: Relationship
   emergencyPhone: string
@@ -93,7 +95,8 @@ const EMPTY_CLINICAL_FORM: ClinicalFormState = {
   initialDiagnosis: '',
   assignedDoctor: '',
   observations: '',
-  medicationsText: '',
+  medications: [],
+  medicationDraft: '',
   emergencyContactName: '',
   emergencyRelationship: 'otro',
   emergencyPhone: '',
@@ -113,7 +116,8 @@ function clinicalFormFromProfile(
     initialDiagnosis: profile.initialDiagnosis ?? '',
     assignedDoctor: profile.assignedDoctor ?? '',
     observations: profile.observations ?? '',
-    medicationsText: (profile.medications ?? []).join('\n'),
+    medications: (profile.medications ?? []).map((item) => item.trim()),
+    medicationDraft: '',
     emergencyContactName: primary?.name ?? profile.emergencyContactName ?? '',
     emergencyRelationship: (primary?.relationship as Relationship) || 'otro',
     emergencyPhone: primary?.phone ?? profile.emergencyContactPhone ?? '',
@@ -260,6 +264,25 @@ export default function Pacientes() {
     setClinicalForm((current) => ({ ...current, [key]: value }))
   }
 
+  const addMedication = (): void => {
+    const draft = clinicalForm.medicationDraft.trim()
+    if (!draft) {
+      return
+    }
+    setClinicalForm((current) => ({
+      ...current,
+      medications: [...current.medications, draft],
+      medicationDraft: '',
+    }))
+  }
+
+  const removeMedication = (index: number): void => {
+    setClinicalForm((current) => ({
+      ...current,
+      medications: current.medications.filter((_, itemIndex) => itemIndex !== index),
+    }))
+  }
+
   const handleClinicalSave = async (): Promise<void> => {
     if (!profile) {
       return
@@ -267,8 +290,7 @@ export default function Pacientes() {
     setClinicalSaving(true)
     setClinicalError(null)
     try {
-      const medications = clinicalForm.medicationsText
-        .split('\n')
+      const medications = clinicalForm.medications
         .map((item) => item.trim())
         .filter((item) => item !== '')
       const updated = await updatePatientMe({
@@ -763,6 +785,84 @@ export default function Pacientes() {
         </section>
 
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-100">
+                <Stethoscope className="size-5 text-blue-600" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Expediente Clínico &amp; Medicación
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Diagnóstico, médico tratante y medicación del paciente.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={openClinicalModal}
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+            >
+              <Pill className="size-4" aria-hidden="true" />
+              Editar Expediente
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Diagnóstico Inicial
+              </p>
+              <p className="mt-1 text-sm font-medium text-slate-800">
+                {profile?.initialDiagnosis?.trim() || '—'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Médico Asignado
+              </p>
+              <p className="mt-1 text-sm font-medium text-slate-800">
+                {profile?.assignedDoctor?.trim() || '—'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Medicamentos
+            </p>
+            {profile?.medications?.length ? (
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {profile.medications.map((medication, index) => (
+                  <li
+                    key={`${medication}-${index}`}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-800"
+                  >
+                    <Pill className="size-3.5 shrink-0 text-blue-500" aria-hidden="true" />
+                    {medication}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">
+                Sin medicamentos registrados
+              </p>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Observaciones Clínicas
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
+              {profile?.observations?.trim() ||
+                'Sin observaciones registradas.'}
+            </p>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Registro de Actividad
@@ -1005,24 +1105,62 @@ export default function Pacientes() {
                     htmlFor="clinical-medications"
                     className="block text-sm font-medium text-slate-700"
                   >
-                    Medicamentos{' '}
-                    <span className="font-normal text-slate-400">
-                      (uno por línea)
-                    </span>
+                    Medicamentos
                   </label>
-                  <textarea
-                    id="clinical-medications"
-                    value={clinicalForm.medicationsText}
-                    onChange={(event) =>
-                      updateClinicalField('medicationsText', event.target.value)
-                    }
-                    placeholder={'Atorvastatina 10 mg\nMetoprolol 50 mg cada 12 h'}
-                    rows={3}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                  />
-                  <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
+                  <div className="mt-1.5 flex gap-2">
+                    <input
+                      id="clinical-medications"
+                      value={clinicalForm.medicationDraft}
+                      onChange={(event) =>
+                        updateClinicalField('medicationDraft', event.target.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          addMedication()
+                        }
+                      }}
+                      placeholder="Ej. Atorvastatina 10 mg"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={addMedication}
+                      aria-label="Agregar medicamento"
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-50 px-3.5 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+                    >
+                      <Plus className="size-4" aria-hidden="true" />
+                      Agregar
+                    </button>
+                  </div>
+                  {clinicalForm.medications.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-400">
+                      Sin medicamentos registrados
+                    </p>
+                  ) : (
+                    <ul className="mt-2.5 flex flex-wrap gap-2">
+                      {clinicalForm.medications.map((medication, index) => (
+                        <li
+                          key={`${medication}-${index}`}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 py-1 pl-3 pr-1.5 text-sm text-blue-800"
+                        >
+                          <Pill className="size-3.5 shrink-0 text-blue-500" aria-hidden="true" />
+                          <span className="truncate">{medication}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeMedication(index)}
+                            aria-label={`Quitar ${medication}`}
+                            className="rounded-full p-1 text-blue-400 transition-colors hover:bg-blue-100 hover:text-blue-700"
+                          >
+                            <X className="size-3.5" aria-hidden="true" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
                     <Pill className="size-3.5" aria-hidden="true" />
-                    Cada línea se guarda como un texto plano en `medications`.
+                    Presiona Enter o «Agregar» para incluir cada medicamento.
                   </p>
                 </div>
 
@@ -1085,7 +1223,7 @@ export default function Pacientes() {
 
                 <button
                   type="button"
-                  disabled={clinicalSaving}
+                  disabled={clinicalSaving || !profile}
                   onClick={() => void handleClinicalSave()}
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
