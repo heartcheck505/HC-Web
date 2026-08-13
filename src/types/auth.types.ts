@@ -2,9 +2,13 @@ export type UserRole = 'Admin' | 'Medic' | 'Nurse'
 
 export type UserPlan = 'basic' | 'premium'
 
+export type LoginPlatform = 'Web' | 'Mobile'
+
 export interface LoginRequest {
   email: string
   password: string
+  /** Origen de la sesión. La app web siempre envía `"Web"`. */
+  platform?: LoginPlatform
 }
 
 export interface RegisterRequest {

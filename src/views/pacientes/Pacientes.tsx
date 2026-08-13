@@ -214,9 +214,11 @@ export default function Pacientes() {
           }
           setPatient({
             fullName: apiFullName || sessionPatientName || NO_PATIENT_LABEL,
-            age: apiPatient.dateOfBirth
-              ? getAge(apiPatient.dateOfBirth)
-              : FALLBACK_PATIENT.age,
+            age:
+              apiPatient.age ??
+              (apiPatient.dateOfBirth
+                ? getAge(apiPatient.dateOfBirth)
+                : FALLBACK_PATIENT.age),
             address:
               apiPatient.address?.trim() || FALLBACK_PATIENT.address,
             tutor: sessionPersonName || FALLBACK_PATIENT.tutor,

@@ -6,7 +6,10 @@ import {
   buildPatientMePayload,
   clearSession,
   getBackedUpPatient,
+  getDailyStatistics,
   getDefaultDashboardRoute,
+  getMeasurements,
+  getPrimaryEmergencyContact,
   getStoredEmergencyContact,
   getStoredPatientDisplayName,
   getStoredPatientName,
@@ -14,6 +17,7 @@ import {
   getStoredUser,
   getUserPlan,
   isAuthenticated,
+  normalizePatientMe,
   normalizePhoneForTel,
   normalizeStoredUser,
   restorePatientProfile,
@@ -676,5 +680,230 @@ describe('normalizePhoneForTel', () => {
     expect(normalizePhoneForTel('55 0000 0000')).toBeNull()
     expect(normalizePhoneForTel('')).toBeNull()
     expect(normalizePhoneForTel('abc')).toBeNull()
+  })
+})
+
+describe('getPrimaryEmergencyContact', () => {
+  it('elige el contacto marcado como primario', () => {
+    const contacts = [
+      { id: 'c2', name: 'Rosa', relationship: 'otro', phone: '+52 55 2222 2222', isPrimary: false },
+      { id: 'c1', name: 'María', relationship: 'hijo/a', phone: '+52 55 1111 1111', isPrimary: true },
+    ]
+    expect(getPrimaryEmergencyContact(contacts)?.name).toBe('María')
+  })
+
+  it('cae al primer contacto cuando ninguno es primario', () => {
+    const contacts = [
+      { id: 'c2', name: 'Rosa', relationship: 'otro', phone: '+52 55 2222 2222', isPrimary: false },
+      { id: 'c1', name: 'Ana', relationship: 'padre/madre', phone: '+52 55 3333 3333', isPrimary: false },
+    ]
+    expect(getPrimaryEmergencyContact(contacts)?.name).toBe('Rosa')
+  })
+
+  it('devuelve null con arreglo vacío o ausente', () => {
+    expect(getPrimaryEmergencyContact([])).toBeNull()
+    expect(getPrimaryEmergencyContact(null)).toBeNull()
+    expect(getPrimaryEmergencyContact(undefined)).toBeNull()
+  })
+})
+
+describe('normalizePatientMe', () => {
+  it('rellena los getters de compatibilidad desde el contacto primario', () => {
+    const profile = normalizePatientMe({
+      firstName: 'Juan',
+      lastName: 'García',
+      emergencyContacts: [
+        { id: 'c2', name: 'Rosa', relationship: 'otro', phone: '+52 55 2222 2222', isPrimary: false },
+        { id: 'c1', name: 'María García', relationship: 'hijo/a', phone: '+52 55 1111 1111', email: 'maria@example.com', isPrimary: true },
+      ],
+    })
+    expect(profile.emergencyContactName).toBe('María García')
+    expect(profile.emergencyContactPhone).toBe('+52 55 1111 1111')
+    expect(profile.emergencyContacts?.length).toBe(2)
+  })
+
+  it('respeta los campos planos si el backend aún los envía', () => {
+    const profile = normalizePatientMe({
+      firstName: 'Juan',
+      lastName: 'García',
+      emergencyContactName: 'Contacto plano',
+      emergencyContactPhone: '+52 55 0000 0000',
+    })
+    expect(profile.emergencyContactName).toBe('Contacto plano')
+    expect(profile.emergencyContactPhone).toBe('+52 55 0000 0000')
+  })
+
+  it('admite los nuevos campos de GET /api/patients/me', () => {
+    const profile = normalizePatientMe({
+      firstName: 'Juan',
+      lastName: 'García',
+      age: 67,
+      initialDiagnosis: 'Hipertensión arterial',
+      assignedDoctor: 'Dra. Pérez',
+      medications: ['Atorvastatina 10 mg', 'Metoprolol 50 mg cada 12 h'],
+      observations: 'Requiere control mensual.',
+    })
+    expect(profile.age).toBe(67)
+    expect(profile.initialDiagnosis).toBe('Hipertensión arterial')
+    expect(profile.assignedDoctor).toBe('Dra. Pérez')
+    expect(profile.medications).toEqual([
+      'Atorvastatina 10 mg',
+      'Metoprolol 50 mg cada 12 h',
+    ])
+    expect(profile.observations).toBe('Requiere control mensual.')
+  })
+
+  it('normaliza medications a arreglo plano y filtra entradas vacías', () => {
+    const profile = normalizePatientMe({
+      firstName: 'Juan',
+      lastName: 'García',
+      medications: ['  ', 'Aspirina 100 mg'],
+    })
+    expect(profile.medications).toEqual(['Aspirina 100 mg'])
+  })
+
+  it('degrada nulos y ausencias sin romper', () => {
+    const profile = normalizePatientMe({
+      firstName: 'Juan',
+      lastName: 'García',
+      age: null,
+      initialDiagnosis: null,
+      assignedDoctor: null,
+      medications: null,
+      emergencyContacts: null,
+      observations: null,
+    })
+    expect(profile.age).toBeNull()
+    expect(profile.initialDiagnosis).toBeNull()
+    expect(profile.medications).toEqual([])
+    expect(profile.emergencyContacts).toEqual([])
+    expect(profile.observations).toBeNull()
+    expect(profile.emergencyContactName).toBeNull()
+    expect(profile.emergencyContactPhone).toBeNull()
+  })
+
+  it('devuelve un perfil vacío seguro con payload nulo', () => {
+    const profile = normalizePatientMe(null)
+    expect(profile.firstName).toBe('')
+    expect(profile.lastName).toBe('')
+    expect(profile.medications).toEqual([])
+    expect(profile.emergencyContacts).toEqual([])
+  })
+})
+
+describe('getMeasurements', () => {
+  it('mapea cada lectura al modelo exacto y degrada nulos', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        okJsonResponse([
+          {
+            timestamp: '2026-08-13T10:00:00Z',
+            deviceId: 'd1',
+            bpm: 72,
+            quality: null,
+            context: null,
+            isNormal: true,
+            notes: null,
+            symptoms: ['mareo', 'dolor de cabeza'],
+          },
+          {
+            timestamp: '2026-08-13T11:00:00Z',
+            deviceId: 'd1',
+            bpm: 95,
+            quality: 'good',
+            context: 'rest',
+            isNormal: false,
+            notes: 'palpitaciones',
+            symptoms: null,
+          },
+        ]),
+      ),
+    )
+    const readings = await getMeasurements()
+    expect(readings).toEqual([
+      {
+        timestamp: '2026-08-13T10:00:00Z',
+        deviceId: 'd1',
+        bpm: 72,
+        quality: null,
+        context: null,
+        isNormal: true,
+        notes: null,
+        symptoms: ['mareo', 'dolor de cabeza'],
+      },
+      {
+        timestamp: '2026-08-13T11:00:00Z',
+        deviceId: 'd1',
+        bpm: 95,
+        quality: 'good',
+        context: 'rest',
+        isNormal: false,
+        notes: 'palpitaciones',
+        symptoms: [],
+      },
+    ])
+  })
+
+  it('devuelve un arreglo vacío si la respuesta no es un arreglo', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okJsonResponse(null)))
+    expect(await getMeasurements()).toEqual([])
+  })
+})
+
+describe('getDailyStatistics', () => {
+  it('mapea el resumen diario y degrada campos nulos a 0', async () => {
+    setStoredToken('jwt-test')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        okJsonResponse([
+          {
+            date: '2026-08-12',
+            averageBpm: 74,
+            minBpm: 61,
+            maxBpm: 88,
+            totalMeasurements: 12,
+            normalMeasurements: 10,
+            abnormalMeasurements: 2,
+          },
+          {
+            date: '2026-08-13',
+            averageBpm: null,
+            minBpm: null,
+            maxBpm: null,
+            totalMeasurements: null,
+            normalMeasurements: null,
+            abnormalMeasurements: null,
+          },
+        ]),
+      ),
+    )
+    const statistics = await getDailyStatistics(
+      '2026-08-07T00:00:00Z',
+      '2026-08-13T23:59:59Z',
+    )
+    expect(statistics).toEqual([
+      {
+        date: '2026-08-12',
+        averageBpm: 74,
+        minBpm: 61,
+        maxBpm: 88,
+        totalMeasurements: 12,
+        normalMeasurements: 10,
+        abnormalMeasurements: 2,
+      },
+      {
+        date: '2026-08-13',
+        averageBpm: 0,
+        minBpm: 0,
+        maxBpm: 0,
+        totalMeasurements: 0,
+        normalMeasurements: 0,
+        abnormalMeasurements: 0,
+      },
+    ])
   })
 })

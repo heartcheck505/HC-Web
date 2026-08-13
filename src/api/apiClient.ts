@@ -37,7 +37,9 @@ import type {
 } from '../types/measurement.types'
 import type { AppNotification } from '../types/notification.types'
 import type {
+  EmergencyContact,
   PatientMe,
+  PatientMeCompatibility,
   PatientMeRequest,
 } from '../types/patient.types'
 import type { Plan, UserPlanSubscription } from '../types/plan.types'
@@ -327,6 +329,85 @@ function asString(value: unknown): string | null {
   }
   const trimmed = value.trim()
   return trimmed === '' ? null : trimmed
+}
+
+/**
+ * Devuelve el contacto de emergencia primario del arreglo `emergencyContacts`
+ * (el marcado con `isPrimary: true` o, si ninguno lo está, el primero), o
+ * `null` cuando el arreglo está vacío/ausente. No arroja si un elemento viene
+ * parcial o `null` desde el backend.
+ */
+export function getPrimaryEmergencyContact(
+  contacts: EmergencyContact[] | null | undefined,
+): EmergencyContact | null {
+  if (!Array.isArray(contacts) || contacts.length === 0) {
+    return null
+  }
+  return (
+    contacts.find((contact) => contact?.isPrimary === true) ??
+    contacts[0] ??
+    null
+  )
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.filter(
+    (item): item is string => typeof item === 'string' && item.trim() !== '',
+  )
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/**
+ * Normaliza la respuesta de `GET/PUT /api/patients/me` al modelo tipado de la
+ * UI, manteniendo compatibilidad con los lectores heredados de
+ * `emergencyContactName`/`emergencyContactPhone`:
+ *
+ * - Cuando el backend devuelve los contactos como arreglo
+ *   `emergencyContacts`, los getters raíz se rellenan con los datos del
+ *   contacto primario (`isPrimary` o el primero). Si el backend sigue
+ *   enviando los campos planos, se respetan sin sobrescribir.
+ * - `medications` se normaliza a un arreglo plano de textos; nunca se intenta
+ *   parsear dosis/frecuencia en la UI.
+ * - Campos nulos/ausentes se degradan a `null`/`[]` sin romper la vista.
+ */
+export function normalizePatientMe(
+  payload: PatientMe | null | undefined,
+): PatientMe & PatientMeCompatibility {
+  if (typeof payload !== 'object' || payload === null) {
+    return {
+      firstName: '',
+      lastName: '',
+      emergencyContactName: null,
+      emergencyContactPhone: null,
+      medications: [],
+      emergencyContacts: [],
+    }
+  }
+  const primary = getPrimaryEmergencyContact(payload.emergencyContacts)
+  const compatibility: PatientMeCompatibility = {
+    emergencyContactName:
+      asString(payload.emergencyContactName) ?? primary?.name ?? null,
+    emergencyContactPhone:
+      asString(payload.emergencyContactPhone) ?? primary?.phone ?? null,
+  }
+  return {
+    ...payload,
+    ...compatibility,
+    age: toNumberOrNull(payload.age),
+    initialDiagnosis: asString(payload.initialDiagnosis),
+    assignedDoctor: asString(payload.assignedDoctor),
+    observations: asString(payload.observations),
+    medications: toStringArray(payload.medications),
+    emergencyContacts: Array.isArray(payload.emergencyContacts)
+      ? payload.emergencyContacts
+      : [],
+  }
 }
 
 /**
@@ -622,17 +703,21 @@ export function buildPatientMePayload(
  * Todas heredan el header `Authorization: Bearer <token>` de `request()`.
  */
 
-export async function getPatientMe(): Promise<PatientMe> {
-  return apiClient.get<PatientMe>(API_ENDPOINTS.patients.me)
+export async function getPatientMe(): Promise<
+  PatientMe & PatientMeCompatibility
+> {
+  const profile = await apiClient.get<PatientMe>(API_ENDPOINTS.patients.me)
+  return normalizePatientMe(profile)
 }
 
 export async function updatePatientMe(
   input: PatientMeUpdateInput,
-): Promise<PatientMe> {
-  return apiClient.put<PatientMe>(
+): Promise<PatientMe & PatientMeCompatibility> {
+  const profile = await apiClient.put<PatientMe>(
     API_ENDPOINTS.patients.me,
     buildPatientMePayload(input),
   )
+  return normalizePatientMe(profile)
 }
 
 export async function getPlans(): Promise<Plan[]> {
@@ -667,8 +752,11 @@ export async function createMeasurement(
 
 /**
  * Lecturas exactas de `GET /api/measurements` con el modelo
- * `{ timestamp, patientId, deviceId, bpm, quality, context, isNormal, notes }`.
- * Acepta `from`/`to` (ISO 8601) para acotar el período consultado.
+ * `{ timestamp, deviceId, bpm, quality, context, isNormal, notes, symptoms }`.
+ * Acepta `from`/`to` (ISO 8601) para acotar el período consultado. Cada
+ * lectura se mapea al modelo exacto y se degradan los campos nulos/ausentes
+ * (`symptoms` → `[]`, `quality`/`context`/`notes` → `null`) para que ninguna
+ * gráfica o lista rompa con respuestas incompletas.
  */
 export async function getMeasurements(
   from?: string,
@@ -682,23 +770,55 @@ export async function getMeasurements(
     query.set('to', to)
   }
   const qs = query.toString()
-  return apiClient.get<MeasurementReading[]>(
+  const readings = await apiClient.get<MeasurementReading[]>(
     `${API_ENDPOINTS.measurements.list}${qs ? `?${qs}` : ''}`,
   )
+  if (!Array.isArray(readings)) {
+    return []
+  }
+  return readings.map((reading) => ({
+    timestamp: typeof reading?.timestamp === 'string' ? reading.timestamp : '',
+    deviceId: typeof reading?.deviceId === 'string' ? reading.deviceId : '',
+    bpm: toNumberOrNull(reading?.bpm) ?? 0,
+    quality: asString(reading?.quality),
+    context: asString(reading?.context),
+    isNormal: reading?.isNormal === true,
+    notes: asString(reading?.notes),
+    symptoms: toStringArray(reading?.symptoms),
+  }))
 }
 
 export async function getNotifications(): Promise<AppNotification[]> {
   return apiClient.get<AppNotification[]>(API_ENDPOINTS.notifications.list)
 }
 
+/**
+ * Resumen diario de `GET /api/statistics/daily`:
+ * `{ date, averageBpm, minBpm, maxBpm, totalMeasurements, normalMeasurements,
+ * abnormalMeasurements }`. Los días sin mediciones pueden llegar con valores
+ * `null`; se degradan a `0` para que los cálculos de tendencia de la UI
+ * (promedios, máximos) no propaguen `null`.
+ */
 export async function getDailyStatistics(
   from: string,
   to: string,
 ): Promise<DailyStatistic[]> {
   const query = new URLSearchParams({ from, to }).toString()
-  return apiClient.get<DailyStatistic[]>(
+  const statistics = await apiClient.get<DailyStatistic[]>(
     `${API_ENDPOINTS.statistics.daily}?${query}`,
   )
+  if (!Array.isArray(statistics)) {
+    return []
+  }
+  return statistics.map((stat) => ({
+    date: typeof stat?.date === 'string' ? stat.date : '',
+    averageBpm: toNumberOrNull(stat?.averageBpm) ?? 0,
+    minBpm: toNumberOrNull(stat?.minBpm) ?? 0,
+    maxBpm: toNumberOrNull(stat?.maxBpm) ?? 0,
+    totalMeasurements: toNumberOrNull(stat?.totalMeasurements) ?? 0,
+    normalMeasurements: toNumberOrNull(stat?.normalMeasurements) ?? 0,
+    abnormalMeasurements: toNumberOrNull(stat?.abnormalMeasurements) ?? 0,
+  }))
 }
 
 export const tokenStorage = {

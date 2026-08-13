@@ -75,6 +75,7 @@ export default function Login() {
       const payload: LoginRequest = {
         email: email.trim(),
         password,
+        platform: 'Web',
       }
       const response = await apiClient.post<LoginResponse>(
         API_ENDPOINTS.auth.login,

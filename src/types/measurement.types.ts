@@ -34,17 +34,24 @@ export interface MeasurementSubmission {
 
 /**
  * Medición exacta devuelta por `GET /api/measurements`:
- * `{ timestamp, patientId, deviceId, bpm, quality, context, isNormal, notes }`.
+ * `{ timestamp, deviceId, bpm, quality, context, isNormal, notes, symptoms }`.
  */
 export interface MeasurementReading {
   timestamp: string
-  patientId: string
   deviceId: string
   bpm: number
   quality: string | null
   context: string | null
   isNormal: boolean
   notes: string | null
+  /**
+   * Síntomas asociados a la lectura como arreglo plano de textos. Puede
+   * llegar `null`/ausente desde el backend; el cliente lo normaliza a un
+   * arreglo vacío para que la UI nunca acceda a `undefined`.
+   */
+  symptoms?: string[] | null
+  /** Presente solo en respuestas paginadas antiguas; la spec actual no lo incluye. */
+  patientId?: string | null
 }
 
 export interface MeasurementSummary {
