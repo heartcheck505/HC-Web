@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import type { MeasurementHistoryItem } from '../../types/measurement.types'
-import { limitHistoryToLast } from './historyLimit'
+import type { MeasurementReading } from '../../types/measurement.types'
+import { formatTimeLabel, limitHistoryToLast } from './historyLimit'
 
 const WIDTH = 600
 const HEIGHT = 190
@@ -8,34 +8,14 @@ const PAD_TOP = 18
 const PAD_BOTTOM = 28
 const PAD_X = 10
 
-function parseTime(iso: string | null | undefined): number | null {
-  if (!iso) {
-    return null
-  }
-  const time = new Date(iso).getTime()
-  return Number.isNaN(time) ? null : time
-}
-
-function formatTick(iso: string | null, showTime: boolean): string {
-  const time = parseTime(iso)
-  if (time === null) {
-    return '—'
-  }
-  return new Date(time).toLocaleString(
-    'es-ES',
-    showTime
-      ? { hour: '2-digit', minute: '2-digit' }
-      : { day: '2-digit', month: 'short' },
-  )
-}
-
 interface HeartRateTrendChartProps {
-  items: MeasurementHistoryItem[]
+  items: MeasurementReading[]
 }
 
 /**
  * Gráfica de tendencia de frecuencia cardíaca alimentada por
- * `GET /api/measurements/history`. Representa solo los últimos 10 registros
+ * `GET /api/measurements` (modelo exacto: `bpm` en el eje Y y hora extraída
+ * de `timestamp` en el eje X). Representa solo los últimos 10 registros
  * cronológicos; se adapta a menos registros y muestra un estado vacío si la
  * API no devuelve mediciones.
  */
@@ -69,7 +49,7 @@ export default function HeartRateTrendChart({
     const coords = points.map((point, index) => ({
       ...coord(index, point.bpm),
       bpm: point.bpm,
-      recordedAt: point.recordedAt,
+      timestamp: point.timestamp,
     }))
     const line = coords
       .map(
@@ -82,16 +62,6 @@ export default function HeartRateTrendChart({
     const baselineY = HEIGHT - PAD_BOTTOM
     const area = `${line} L ${lastX.toFixed(1)} ${baselineY} L ${firstX.toFixed(1)} ${baselineY} Z`
 
-    const validTimes = points
-      .map((point) => parseTime(point.recordedAt))
-      .filter((time): time is number => time !== null)
-    const showTime =
-      validTimes.length > 0 &&
-      validTimes.every(
-        (time) =>
-          new Date(time).toDateString() ===
-          new Date(validTimes[0]).toDateString(),
-      )
     const gridValues = [lo, (lo + hi) / 2, hi]
 
     return {
@@ -99,7 +69,6 @@ export default function HeartRateTrendChart({
       line,
       area,
       baselineY,
-      showTime,
       gridValues,
       hi,
       lo,
@@ -169,7 +138,7 @@ export default function HeartRateTrendChart({
       />
       {chart.coords.map((c) => (
         <circle
-          key={`${c.recordedAt}-${c.bpm}`}
+          key={`${c.timestamp}-${c.bpm}`}
           cx={c.x}
           cy={c.y}
           r="4"
@@ -181,14 +150,14 @@ export default function HeartRateTrendChart({
       ))}
       {chart.coords.map((c) => (
         <text
-          key={`label-${c.recordedAt}-${c.bpm}`}
+          key={`label-${c.timestamp}-${c.bpm}`}
           x={c.x}
           y={HEIGHT - 8}
           textAnchor="middle"
           fontSize="10"
           fill="#64748b"
         >
-          {formatTick(c.recordedAt, chart.showTime)}
+          {formatTimeLabel(c.timestamp)}
         </text>
       ))}
     </svg>

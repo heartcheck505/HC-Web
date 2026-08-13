@@ -32,7 +32,7 @@ import type {
   DeviceRegistrationRequest,
 } from '../types/device.types'
 import type {
-  MeasurementHistoryItem,
+  MeasurementReading,
   MeasurementSubmission,
 } from '../types/measurement.types'
 import type { AppNotification } from '../types/notification.types'
@@ -665,9 +665,25 @@ export async function createMeasurement(
   return apiClient.post<unknown>(API_ENDPOINTS.measurements.create, payload)
 }
 
-export async function getMeasurementHistory(): Promise<MeasurementHistoryItem[]> {
-  return apiClient.get<MeasurementHistoryItem[]>(
-    API_ENDPOINTS.measurements.history,
+/**
+ * Lecturas exactas de `GET /api/measurements` con el modelo
+ * `{ timestamp, patientId, deviceId, bpm, quality, context, isNormal, notes }`.
+ * Acepta `from`/`to` (ISO 8601) para acotar el período consultado.
+ */
+export async function getMeasurements(
+  from?: string,
+  to?: string,
+): Promise<MeasurementReading[]> {
+  const query = new URLSearchParams()
+  if (from) {
+    query.set('from', from)
+  }
+  if (to) {
+    query.set('to', to)
+  }
+  const qs = query.toString()
+  return apiClient.get<MeasurementReading[]>(
+    `${API_ENDPOINTS.measurements.list}${qs ? `?${qs}` : ''}`,
   )
 }
 

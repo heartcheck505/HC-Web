@@ -1,10 +1,11 @@
 export interface DailyStatistic {
   date: string
-  measurementCount?: number
-  averageBpm?: number | null
-  minBpm?: number | null
-  maxBpm?: number | null
-  averageSpo2?: number | null
+  averageBpm: number
+  minBpm: number
+  maxBpm: number
+  totalMeasurements: number
+  normalMeasurements: number
+  abnormalMeasurements: number
 }
 
 export interface DailyStatisticsQuery {

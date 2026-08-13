@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -21,7 +21,7 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
-  getMeasurementHistory,
+  getMeasurements,
   getPatientMe,
   getStoredEmergencyContact,
   getStoredPatientDisplayName,
@@ -35,8 +35,13 @@ import Sidebar from '../../components/layout/Sidebar'
 import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import PlanChangeModal from '../../components/plan/PlanChangeModal'
 import HeartRateTrendChart from '../../components/charts/HeartRateTrendChart'
+import {
+  formatTimeLabel,
+  limitLatestReadings,
+  normalLabel,
+} from '../../components/charts/historyLimit'
 import type { Device } from '../../types/device.types'
-import type { Measurement, MeasurementHistoryItem } from '../../types/measurement.types'
+import type { MeasurementReading } from '../../types/measurement.types'
 import type { PagedResult } from '../../types/patient.types'
 
 function getFirstName(name: string | null | undefined): string {
@@ -79,6 +84,20 @@ function LogRow({ day, text, emoji, tone }: LogRowProps) {
   )
 }
 
+type TrendPeriod = 'day' | 'week' | 'month'
+
+const TREND_RANGES: Record<TrendPeriod, number> = {
+  day: 1,
+  week: 7,
+  month: 30,
+}
+
+const TREND_OPTIONS: { value: TrendPeriod; label: string }[] = [
+  { value: 'day', label: 'Día' },
+  { value: 'week', label: 'Semana' },
+  { value: 'month', label: 'Mes' },
+]
+
 export default function DashboardBasico() {
   const toastTimer = useRef<number | null>(null)
   const location = useLocation()
@@ -102,10 +121,11 @@ export default function DashboardBasico() {
     emergencyContact.name.trim() || emergencyContact.phone.trim(),
   )
   const [device, setDevice] = useState<Device | null>(null)
-  const [latestMeasurement, setLatestMeasurement] = useState<Measurement | null>(null)
-  const [measurementHistory, setMeasurementHistory] = useState<
-    MeasurementHistoryItem[]
-  >([])
+  const [latestMeasurement, setLatestMeasurement] =
+    useState<MeasurementReading | null>(null)
+  const [inicioReadings, setInicioReadings] = useState<MeasurementReading[]>([])
+  const [trendReadings, setTrendReadings] = useState<MeasurementReading[]>([])
+  const [trendPeriod, setTrendPeriod] = useState<TrendPeriod>('day')
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -149,11 +169,11 @@ export default function DashboardBasico() {
       apiClient.get<Device[] | PagedResult<Device>>(
         `${API_ENDPOINTS.devices.list}?page=1&pageSize=1`,
       ),
-      apiClient.get<Measurement[] | PagedResult<Measurement>>(
+      apiClient.get<MeasurementReading[] | PagedResult<MeasurementReading>>(
         `${API_ENDPOINTS.measurements.list}?page=1&pageSize=1`,
       ),
-      getMeasurementHistory(),
-    ]).then(([deviceResult, measurementResult, historyResult]) => {
+      getMeasurements(),
+    ]).then(([deviceResult, measurementResult, readingsResult]) => {
       if (cancelled) {
         return
       }
@@ -163,15 +183,45 @@ export default function DashboardBasico() {
       if (measurementResult.status === 'fulfilled') {
         setLatestMeasurement(toArray(measurementResult.value)[0] ?? null)
       }
-      if (historyResult.status === 'fulfilled') {
-        // Historial real para la gráfica de tendencias.
-        setMeasurementHistory(historyResult.value)
+      if (readingsResult.status === 'fulfilled') {
+        // Lecturas reales de GET /api/measurements para la gráfica de Inicio.
+        setInicioReadings(readingsResult.value)
       }
     })
     return () => {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      return
+    }
+    let cancelled = false
+    const days = TREND_RANGES[trendPeriod]
+    const to = new Date().toISOString()
+    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+    // Consulta de Tendencias con parámetros ?from=&to= de la API exacta.
+    getMeasurements(from, to)
+      .then((readings) => {
+        if (!cancelled) {
+          setTrendReadings(readings)
+        }
+      })
+      .catch(() => {
+        return
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [trendPeriod])
+
+  const latestBpm = latestMeasurement?.bpm ?? 0
+  const latestLabel = normalLabel(latestMeasurement?.isNormal)
+  const recentReadings = useMemo(
+    () => limitLatestReadings(trendReadings, 5),
+    [trendReadings],
+  )
 
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [symptomOpen, setSymptomOpen] = useState(false)
@@ -291,7 +341,7 @@ export default function DashboardBasico() {
             </div>
             <div className="mt-4 flex items-baseline gap-1.5">
               <span className="text-5xl font-extrabold text-slate-900">
-                {latestMeasurement?.heartRate ?? 0}
+                {latestMeasurement?.bpm ?? 0}
               </span>
               <span className="text-lg font-semibold text-slate-500">BPM</span>
             </div>
@@ -435,6 +485,129 @@ export default function DashboardBasico() {
             </div>
           </div>
 
+          {/* Gráfica de Inicio: últimas 10 lecturas reales de GET /api/measurements */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Ritmo cardíaco · Últimas 10 lecturas
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Lecturas recientes del dispositivo.
+                </p>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-4xl font-extrabold text-slate-900">
+                  {latestBpm > 0 ? latestBpm : '--'}
+                </span>
+                <span className="text-base font-semibold text-slate-500">
+                  BPM
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+                  latestLabel === 'Alto'
+                    ? 'bg-rose-100 text-rose-700'
+                    : 'bg-emerald-100 text-emerald-700'
+                }`}
+              >
+                <span
+                  className={`size-1.5 rounded-full ${
+                    latestLabel === 'Alto'
+                      ? 'bg-rose-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  aria-hidden="true"
+                />
+                {latestLabel}
+              </span>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-4">
+              <HeartRateTrendChart items={inicioReadings} />
+            </div>
+          </div>
+
+          {/* Tendencias: selector de período + gráfica + registros recientes */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Tendencias</h3>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  Ritmo cardíaco / Registros recientes
+                </p>
+              </div>
+              <div
+                role="group"
+                aria-label="Período de tendencias"
+                className="flex w-fit rounded-lg border border-slate-200 bg-slate-50 p-0.5"
+              >
+                {TREND_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setTrendPeriod(option.value)}
+                    aria-pressed={trendPeriod === option.value}
+                    className={`rounded-md px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                      trendPeriod === option.value
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-100 bg-white p-4">
+              <HeartRateTrendChart items={trendReadings} />
+            </div>
+
+            <h4 className="mt-6 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Registros recientes
+            </h4>
+            {recentReadings.length === 0 ? (
+              <p className="mt-3 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+                Sin registros en el período seleccionado.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2.5">
+                {recentReadings.map((reading, index) => {
+                  const label = normalLabel(reading.isNormal)
+                  return (
+                    <li
+                      key={`${reading.timestamp}-${reading.bpm}-${index}`}
+                      className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3"
+                    >
+                      <span className="flex size-11 shrink-0 flex-col items-center justify-center rounded-xl bg-white font-extrabold text-slate-900 shadow-sm">
+                        {reading.bpm}
+                        <span className="text-[9px] font-semibold uppercase text-slate-400">
+                          BPM
+                        </span>
+                      </span>
+                      <p className="min-w-0 flex-1 text-sm font-medium text-slate-600">
+                        {formatTimeLabel(reading.timestamp)}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                          label === 'Alto'
+                            ? 'bg-rose-100 text-rose-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {label}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -447,20 +620,6 @@ export default function DashboardBasico() {
                 <span className="size-1.5 rounded-full bg-slate-400" aria-hidden="true" />
                 {device?.lastSyncAt ? 'Conectado' : 'Desconectado'}
               </span>
-            </div>
-
-            <div className="mt-6">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Frecuencia Cardíaca · Tendencias
-                </h4>
-                <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                  Últimos 10 registros
-                </span>
-              </div>
-              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4">
-                <HeartRateTrendChart items={measurementHistory} />
-              </div>
             </div>
 
             <ul className="mt-6 space-y-3 text-sm">

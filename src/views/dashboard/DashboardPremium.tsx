@@ -28,7 +28,7 @@ import {
 import {
   API_ENDPOINTS,
   apiClient,
-  getMeasurementHistory,
+  getMeasurements,
   getPatientMe,
   getStoredPatientDisplayName,
   getStoredUser,
@@ -40,10 +40,7 @@ import RegisterDeviceModal from '../../components/devices/RegisterDeviceModal'
 import HeartRateTrendChart from '../../components/charts/HeartRateTrendChart'
 import type { Alert, AlertSeverity, AlertStatus, AlertType } from '../../types/alert.types'
 import type { Device } from '../../types/device.types'
-import type {
-  Measurement,
-  MeasurementHistoryItem,
-} from '../../types/measurement.types'
+import type { MeasurementReading } from '../../types/measurement.types'
 import type { PagedResult } from '../../types/patient.types'
 
 function getFirstName(name: string | null | undefined): string {
@@ -260,9 +257,10 @@ export default function DashboardPremium() {
   // Indicadores clave: parten en 0 / vacíos / desconectados hasta recibir
   // telemetría real de la API o del reloj.
   const [device, setDevice] = useState<Device | null>(null)
-  const [latestMeasurement, setLatestMeasurement] = useState<Measurement | null>(null)
-  const [measurementHistory, setMeasurementHistory] = useState<
-    MeasurementHistoryItem[]
+  const [latestMeasurement, setLatestMeasurement] =
+    useState<MeasurementReading | null>(null)
+  const [measurementReadings, setMeasurementReadings] = useState<
+    MeasurementReading[]
   >([])
   const [hrv, setHrv] = useState<number>(0)
   const [sleepScore, setSleepScore] = useState<number>(0)
@@ -336,16 +334,16 @@ export default function DashboardPremium() {
       apiClient.get<Device[] | PagedResult<Device>>(
         `${API_ENDPOINTS.devices.list}?page=1&pageSize=1`,
       ),
-      apiClient.get<Measurement[] | PagedResult<Measurement>>(
+      apiClient.get<MeasurementReading[] | PagedResult<MeasurementReading>>(
         `${API_ENDPOINTS.measurements.list}?page=1&pageSize=1`,
       ),
-      getMeasurementHistory(),
+      getMeasurements(),
       apiClient.get<Alert[] | PagedResult<Alert>>(
         `${API_ENDPOINTS.alerts.list}?pageSize=30`,
       ),
     ])
       .then(
-        ([deviceResult, measurementResult, historyResult, alertsResult]) => {
+        ([deviceResult, measurementResult, readingsResult, alertsResult]) => {
           if (cancelled) {
             return
           }
@@ -353,24 +351,22 @@ export default function DashboardPremium() {
             setDevice(toArray(deviceResult.value)[0] ?? null)
           }
           if (measurementResult.status === 'fulfilled') {
-            const latest = toArray(measurementResult.value)[0] ?? null
-            setLatestMeasurement(latest)
-            // VFC y sueño: el backend aún no los expone; se mantienen en espera
-            // (0 / vacíos) hasta que la API o el reloj los reporte.
-            setHrv(0)
-            setSleepScore(0)
-            setSleepTimeMinutes(0)
-            setSleepPhases([])
+            setLatestMeasurement(toArray(measurementResult.value)[0] ?? null)
           }
-          if (historyResult.status === 'fulfilled') {
-            // Historial real para la gráfica de tendencias.
-            setMeasurementHistory(historyResult.value)
+          if (readingsResult.status === 'fulfilled') {
+            // Lecturas reales de GET /api/measurements para la gráfica.
+            setMeasurementReadings(readingsResult.value)
           }
           if (alertsResult.status === 'fulfilled') {
             setEvents(toArray(alertsResult.value))
           }
-          // Puntaje de estabilidad y análisis predictivo: el backend aún no los
-          // expone; permanecen en espera ('--') hasta disponer del servicio.
+          // VFC, sueño, puntaje de estabilidad y análisis predictivo: el
+          // backend aún no los expone; se mantienen en espera (0 / '--' /
+          // vacíos) hasta disponer del servicio.
+          setHrv(0)
+          setSleepScore(0)
+          setSleepTimeMinutes(0)
+          setSleepPhases([])
           setStabilityScore(null)
           setAiAnalysis(null)
         },
@@ -398,8 +394,10 @@ export default function DashboardPremium() {
       )
   }, [events, severityFilter, dayRange])
 
-  const heartRate = latestMeasurement?.heartRate ?? 0
-  const spo2 = latestMeasurement?.spo2 ?? 0
+  const heartRate = latestMeasurement?.bpm ?? 0
+  // SpO₂ no está en el modelo exacto de GET /api/measurements; se mantiene en
+  // espera ('--') hasta que la API exponga el indicador.
+  const spo2 = 0
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -583,7 +581,7 @@ export default function DashboardPremium() {
               </StatusBadge>
             </div>
             <div className="mt-5">
-              <HeartRateTrendChart items={measurementHistory} />
+              <HeartRateTrendChart items={measurementReadings} />
             </div>
           </div>
 

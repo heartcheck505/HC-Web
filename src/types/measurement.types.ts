@@ -33,17 +33,18 @@ export interface MeasurementSubmission {
 }
 
 /**
- * Elemento del historial devuelto por `GET /api/measurements/history`.
- * Los campos son defensivos: la API puede devolver campos adicionales.
+ * Medición exacta devuelta por `GET /api/measurements`:
+ * `{ timestamp, patientId, deviceId, bpm, quality, context, isNormal, notes }`.
  */
-export interface MeasurementHistoryItem {
-  id?: string | null
-  deviceId?: string | null
-  bpm?: number | null
-  quality?: string | null
-  context?: string | null
-  notes?: string | null
-  recordedAt?: string | null
+export interface MeasurementReading {
+  timestamp: string
+  patientId: string
+  deviceId: string
+  bpm: number
+  quality: string | null
+  context: string | null
+  isNormal: boolean
+  notes: string | null
 }
 
 export interface MeasurementSummary {
