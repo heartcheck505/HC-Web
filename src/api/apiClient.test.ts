@@ -475,20 +475,54 @@ describe('buildPatientMePayload', () => {
     ])
   })
 
-  it('nunca envía Id, id ni patientId: el backend identifica al usuario por el claim sub del JWT', () => {
+  it('incluye el id del paciente (ObjectId de 24 caracteres) en el payload de PUT /api/patients/me', () => {
+    const objectId = '664f0c2a9d3b4c0012ab34cd'
     const payload = buildPatientMePayload({
+      id: objectId,
       firstName: 'Juan',
       lastName: 'García',
       initialDiagnosis: 'Hipertensión',
     })
     expect(payload).toMatchObject({
+      id: objectId,
       firstName: 'Juan',
       lastName: 'García',
       initialDiagnosis: 'Hipertensión',
     })
-    expect('id' in payload).toBe(false)
     expect('Id' in payload).toBe(false)
     expect('patientId' in payload).toBe(false)
+  })
+
+  it('omite el id cuando no está disponible y rechaza ObjectIds inválidos', () => {
+    const withoutId = buildPatientMePayload({
+      firstName: 'Juan',
+      lastName: 'García',
+    })
+    expect('id' in withoutId).toBe(false)
+
+    expect(() =>
+      buildPatientMePayload({
+        id: 'no-es-un-objectid',
+        firstName: 'Juan',
+        lastName: 'García',
+      }),
+    ).toThrow(/ObjectId/)
+
+    expect(() =>
+      buildPatientMePayload({
+        id: '   ',
+        firstName: 'Juan',
+        lastName: 'García',
+      }),
+    ).not.toThrow()
+    expect(
+      'id' in
+        buildPatientMePayload({
+          id: '   ',
+          firstName: 'Juan',
+          lastName: 'García',
+        }),
+    ).toBe(false)
   })
 })
 

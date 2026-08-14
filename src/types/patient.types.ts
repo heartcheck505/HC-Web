@@ -19,11 +19,17 @@ export interface EmergencyContact {
  * Perfil del paciente autenticado tal como lo espera la API de producción en
  * `GET/PUT /api/patients/me`. Los apellidos se envían concatenados en
  * `lastName`; el frontend nunca envía `secondLastName`. El payload de `PUT`
- * es un objeto plano (patch parcial): el backend identifica al usuario
- * mediante el claim `sub` del token JWT, por lo que no se envía `Id`, `id` ni
- * `patientId`.
+ * es un objeto plano (patch parcial) que SIEMPRE incluye el `id` del paciente:
+ * el backend lo exige (400 "The Id field is required" si falta) para saber qué
+ * perfil actualizar.
  */
 export interface PatientMeRequest {
+  /**
+   * Id del paciente (ObjectId MongoDB, 24 caracteres hex). `GET` lo devuelve
+   * y `PUT /api/patients/me` lo exige en el cuerpo; viaja como `id` en el JSON
+   * (camelCase → `Id` del modelo ASP.NET).
+   */
+  id?: string | null
   firstName: string
   lastName: string
   phone?: string | null
@@ -41,12 +47,6 @@ export interface PatientMeRequest {
 }
 
 export interface PatientMe extends PatientMeRequest {
-  /**
-   * Id del paciente (ObjectId MongoDB, 24 caracteres hex) devuelto por
-   * `GET /api/patients/me`. Es solo de lectura: nunca viaja en el request de
-   * `PUT /api/patients/me`.
-   */
-  id?: string | null
   email?: string | null
   createdAt?: string | null
   /**

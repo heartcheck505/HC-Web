@@ -761,12 +761,19 @@ export const apiClient = {
 /**
  * Datos del paciente que alimentan `PUT /api/patients/me`. La UI puede
  * manejar `secondLastName` por separado; al construir el payload los apellidos
- * se concatenan y solo `firstName`/`lastName` viajan al backend. El backend
- * identifica al usuario mediante el claim `sub` del token JWT, por lo que el
- * payload nunca incluye `Id`, `id` ni `patientId`: es un objeto plano con los
- * campos que se desean actualizar (patch parcial).
+ * se concatenan y solo `firstName`/`lastName` viajan al backend. El payload
+ * es un objeto plano con los campos que se desean actualizar (patch parcial)
+ * y SIEMPRE incluye el `id` del paciente: el backend lo exige (validación
+ * `[Required]` sobre la propiedad `Id`) para identificar el perfil a actualizar.
  */
 export interface PatientMeUpdateInput {
+  /**
+   * Id del paciente (ObjectId MongoDB, 24 caracteres hexadecimales) tal como
+   * lo devuelve `GET /api/patients/me`. Obligatorio en `PUT /api/patients/me`:
+   * viaja como `id` en el cuerpo JSON (camelCase → `Id` del modelo ASP.NET).
+   * La UI lo recupera del perfil cargado o recargándolo con `GET /api/patients/me`.
+   */
+  id?: string | null
   firstName?: string
   lastName?: string
   secondLastName?: string | null
@@ -784,10 +791,25 @@ export interface PatientMeUpdateInput {
   emergencyContacts?: PatientMeRequest['emergencyContacts']
 }
 
+/** ObjectId de MongoDB: 24 caracteres hexadecimales (válido para PUT /api/patients/me). */
+const PATIENT_ID_REGEX = /^[0-9a-fA-F]{24}$/
+
 export function buildPatientMePayload(
   input: PatientMeUpdateInput,
 ): Partial<PatientMeRequest> {
   const payload: Partial<PatientMeRequest> = {}
+  // El backend exige `id` en el cuerpo de PUT /api/patients/me (400 "The Id
+  // field is required" si falta). Si viene presente pero no es un ObjectId
+  // hexadecimal de 24 caracteres, se falla de forma explícita antes de enviar.
+  if (input.id !== undefined && input.id !== null && input.id.trim() !== '') {
+    const patientId = input.id.trim()
+    if (!PATIENT_ID_REGEX.test(patientId)) {
+      throw new Error(
+        'El identificador del paciente no es un ObjectId válido (se esperan 24 caracteres hexadecimales).',
+      )
+    }
+    payload.id = patientId
+  }
   if (input.firstName !== undefined) {
     payload.firstName = input.firstName.trim()
   }
@@ -845,8 +867,8 @@ export function buildPatientMePayload(
             isPrimary: contact?.isPrimary === true,
           }))
   }
-  // El backend identifica al paciente mediante el claim `sub` del token JWT:
-  // nunca se agregan wrappers con `Id`, `id` ni `patientId` al payload.
+  // Solo el `id` viaja como identificador (camelCase → `Id` del modelo
+  // ASP.NET); no se agregan wrappers adicionales con `Id`/`patientId`.
   return payload
 }
 
@@ -864,9 +886,10 @@ export async function getPatientMe(): Promise<
 
 /**
  * Actualiza el perfil del paciente autenticado con `PUT /api/patients/me`.
- * El payload es un objeto plano (patch parcial) sin `Id`/`id`/`patientId`: el
- * backend identifica al usuario mediante el claim `sub` del token JWT.
- * Devuelve el perfil normalizado tras el guardado.
+ * El payload es un objeto plano (patch parcial) que incluye obligatoriamente
+ * el `id` del paciente (ObjectId de 24 caracteres) recuperado de
+ * `GET /api/patients/me`; sin él el backend responde 400 "The Id field is
+ * required". Devuelve el perfil normalizado tras el guardado.
  */
 export async function updatePatientMe(
   input: PatientMeUpdateInput,

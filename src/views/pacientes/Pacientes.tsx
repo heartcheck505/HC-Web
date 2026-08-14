@@ -91,6 +91,9 @@ const relationshipOptions: { value: Relationship; label: string }[] = [
   { value: 'otro', label: 'Otro' },
 ]
 
+// ObjectId de MongoDB requerido por PUT /api/patients/me: 24 caracteres hex.
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/
+
 const EMPTY_CLINICAL_FORM: ClinicalFormState = {
   initialDiagnosis: '',
   assignedDoctor: '',
@@ -290,14 +293,41 @@ export default function Pacientes() {
     setClinicalSaving(true)
     setClinicalError(null)
     try {
+      // PUT /api/patients/me exige el `id` del paciente (ObjectId de 24
+      // caracteres) en el cuerpo del JSON: sin él el backend responde 400
+      // "The Id field is required". Se recupera del perfil cargado o, si
+      // falta, recargándolo con GET /api/patients/me.
+      let patientId = profile.id?.trim() || ''
+      if (!patientId) {
+        try {
+          const fresh = await getPatientMe()
+          patientId = fresh.id?.trim() || ''
+          setProfile(fresh)
+        } catch {
+          patientId = ''
+        }
+      }
+      if (!patientId) {
+        // Último recurso: el id del usuario autenticado cuando parece un
+        // ObjectId hexadecimal de 24 caracteres.
+        const sessionId = getStoredUser()?.id?.trim() || ''
+        if (OBJECT_ID_REGEX.test(sessionId)) {
+          patientId = sessionId
+        }
+      }
+      if (!patientId) {
+        setClinicalError(
+          'No se pudo obtener el identificador del paciente. Cierra la sesión e inicia sesión de nuevo.',
+        )
+        return
+      }
       const medications = clinicalForm.medications
         .map((item) => item.trim())
         .filter((item) => item !== '')
-      // Patch parcial de PUT /api/patients/me: solo viajan los campos clínicos
-      // editados. El backend identifica al paciente mediante el claim `sub`
-      // del token JWT, por lo que el payload no incluye `Id`, `id` ni
-      // `patientId`.
+      // Patch parcial de PUT /api/patients/me: el `id` del paciente viaja
+      // obligatoriamente junto a los campos clínicos editados.
       const updated = await updatePatientMe({
+        id: patientId,
         initialDiagnosis: clinicalForm.initialDiagnosis.trim() || null,
         assignedDoctor: clinicalForm.assignedDoctor.trim() || null,
         observations: clinicalForm.observations.trim() || null,
