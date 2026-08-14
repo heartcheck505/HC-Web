@@ -352,177 +352,154 @@ describe('ruta inicial según licencia', () => {
 })
 
 describe('buildPatientMePayload', () => {
-  it('envía solo los campos editados de PUT /api/patients/me (patch parcial)', () => {
+  it('envía SOLO los campos válidos de PUT /api/patients/me (whitelist)', () => {
     const payload = buildPatientMePayload({
-      firstName: 'Juan',
-      lastName: 'García',
-      phone: '555-1234',
-      dateOfBirth: '1980-05-01',
-      gender: 'Male',
+      weight: 76,
+      height: 1.78,
       bloodType: 'O+',
-      emergencyContactName: 'María García',
-      emergencyContactPhone: '555-5678',
+      phone: '555-1234',
       address: 'Calle 1 #23',
+      observations: 'Requiere control mensual.',
+      medications: ['Atorvastatina 10 mg'],
+      emergencyContacts: [
+        { name: 'María', relationship: 'hijo/a', phone: '555-5678', isPrimary: true },
+      ],
     })
     expect(payload).toEqual({
-      firstName: 'Juan',
-      lastName: 'García',
-      phone: '555-1234',
-      dateOfBirth: '1980-05-01',
-      gender: 'Male',
+      weight: 76,
+      height: 1.78,
       bloodType: 'O+',
-      emergencyContactName: 'María García',
-      emergencyContactPhone: '555-5678',
+      phone: '555-1234',
       address: 'Calle 1 #23',
+      observations: 'Requiere control mensual.',
+      medications: ['Atorvastatina 10 mg'],
+      emergencyContacts: [
+        {
+          name: 'María',
+          relationship: 'hijo/a',
+          phone: '555-5678',
+          email: null,
+          isPrimary: true,
+        },
+      ],
     })
+    // Campos no soportados por la API: jamás viajan en el payload.
     expect('initialDiagnosis' in payload).toBe(false)
     expect('assignedDoctor' in payload).toBe(false)
-    expect('observations' in payload).toBe(false)
-    expect('medications' in payload).toBe(false)
-    expect('emergencyContacts' in payload).toBe(false)
+    expect('firstName' in payload).toBe(false)
+    expect('lastName' in payload).toBe(false)
+    expect('dateOfBirth' in payload).toBe(false)
+    expect('gender' in payload).toBe(false)
+    expect('emergencyContactName' in payload).toBe(false)
+    expect('emergencyContactPhone' in payload).toBe(false)
+    expect('userId' in payload).toBe(false)
+    expect('Id' in payload).toBe(false)
+    expect('patientId' in payload).toBe(false)
     expect(Object.keys(payload).sort()).toEqual(
       [
         'address',
         'bloodType',
-        'dateOfBirth',
-        'emergencyContactName',
-        'emergencyContactPhone',
-        'firstName',
-        'gender',
-        'lastName',
+        'emergencyContacts',
+        'height',
+        'medications',
+        'observations',
         'phone',
+        'weight',
       ].sort(),
     )
   })
 
-  it('concatena secondLastName en lastName sin enviarlo al backend', () => {
-    const payload = buildPatientMePayload({
-      firstName: 'Juan',
-      lastName: 'García',
-      secondLastName: 'López',
-    })
-    expect(payload.lastName).toBe('García López')
-    expect('secondLastName' in payload).toBe(false)
-  })
-
   it('omite los campos no editados en lugar de enviar null (patch parcial)', () => {
-    const payload = buildPatientMePayload({
-      firstName: 'Ana',
-      lastName: 'Pérez',
-    })
-    expect(payload).toEqual({ firstName: 'Ana', lastName: 'Pérez' })
-    expect('phone' in payload).toBe(false)
-    expect('dateOfBirth' in payload).toBe(false)
-    expect('gender' in payload).toBe(false)
+    const payload = buildPatientMePayload({})
+    expect(payload).toEqual({})
+    expect('id' in payload).toBe(false)
+    expect('weight' in payload).toBe(false)
+    expect('height' in payload).toBe(false)
     expect('bloodType' in payload).toBe(false)
-    expect('emergencyContactName' in payload).toBe(false)
-    expect('emergencyContactPhone' in payload).toBe(false)
+    expect('phone' in payload).toBe(false)
     expect('address' in payload).toBe(false)
-    expect('initialDiagnosis' in payload).toBe(false)
-    expect('assignedDoctor' in payload).toBe(false)
     expect('observations' in payload).toBe(false)
     expect('medications' in payload).toBe(false)
     expect('emergencyContacts' in payload).toBe(false)
   })
 
-  it('incluye la información clínica y los contactos en el payload', () => {
+  it('sanea weight/height a números finitos y los degrada a null si no lo son', () => {
     const payload = buildPatientMePayload({
-      firstName: 'Juan',
-      lastName: 'García',
-      initialDiagnosis: 'Hipertensión arterial',
-      assignedDoctor: 'Dra. Pérez',
-      observations: 'Requiere control mensual.',
-      medications: ['Atorvastatina 10 mg', 'Metoprolol 50 mg'],
-      emergencyContacts: [
-        {
-          name: 'María García',
-          relationship: 'hijo/a',
-          phone: '+52 55 1111 1111',
-          email: 'maria@example.com',
-          isPrimary: true,
-        },
-      ],
+      weight: 76.5,
+      height: Number.NaN,
+      bloodType: '  O+  ',
     })
-    expect(payload).toMatchObject({
-      initialDiagnosis: 'Hipertensión arterial',
-      assignedDoctor: 'Dra. Pérez',
-      observations: 'Requiere control mensual.',
-      medications: ['Atorvastatina 10 mg', 'Metoprolol 50 mg'],
-      emergencyContacts: [
-        {
-          name: 'María García',
-          relationship: 'hijo/a',
-          phone: '+52 55 1111 1111',
-          email: 'maria@example.com',
-          isPrimary: true,
-        },
-      ],
-    })
+    expect(payload.weight).toBe(76.5)
+    expect(payload.height).toBeNull()
+    expect(payload.bloodType).toBe('O+')
   })
 
-  it('normaliza medications a arreglo plano y contactos vacíos', () => {
+  it('incluye medications y contactos saneados (sin id internos)', () => {
     const payload = buildPatientMePayload({
-      firstName: 'Ana',
-      lastName: 'Pérez',
       medications: ['  ', 'Aspirina 100 mg'],
       emergencyContacts: [
-        { name: '', relationship: '', phone: '', isPrimary: false },
+        {
+          id: '664f0c2a9d3b4c0012ab34cd',
+          name: 'María García',
+          relationship: 'hijo/a',
+          phone: '+52 55 1111 1111',
+          email: 'maria@example.com',
+          isPrimary: true,
+        },
       ],
     })
     expect(payload.medications).toEqual(['Aspirina 100 mg'])
     expect(payload.emergencyContacts).toEqual([
-      { name: '', relationship: '', phone: '', email: null, isPrimary: false },
+      {
+        name: 'María García',
+        relationship: 'hijo/a',
+        phone: '+52 55 1111 1111',
+        email: 'maria@example.com',
+        isPrimary: true,
+      },
     ])
+    expect('id' in (payload.emergencyContacts as object[])[0]).toBe(false)
+    expect('userId' in (payload.emergencyContacts as object[])[0]).toBe(false)
+  })
+
+  it('rechaza más de 3 contactos de emergencia antes de enviar', () => {
+    const contacts = Array.from({ length: 4 }, (_, index) => ({
+      name: `Contacto ${index + 1}`,
+      relationship: 'otro',
+      phone: '555-0000',
+      isPrimary: index === 0,
+    }))
+    expect(() => buildPatientMePayload({ emergencyContacts: contacts })).toThrow(
+      /máximo 3/,
+    )
   })
 
   it('incluye el id del paciente (ObjectId de 24 caracteres) en el payload de PUT /api/patients/me', () => {
     const objectId = '664f0c2a9d3b4c0012ab34cd'
     const payload = buildPatientMePayload({
       id: objectId,
-      firstName: 'Juan',
-      lastName: 'García',
-      initialDiagnosis: 'Hipertensión',
+      observations: 'Hipertensión bajo control.',
     })
     expect(payload).toMatchObject({
       id: objectId,
-      firstName: 'Juan',
-      lastName: 'García',
-      initialDiagnosis: 'Hipertensión',
+      observations: 'Hipertensión bajo control.',
     })
     expect('Id' in payload).toBe(false)
     expect('patientId' in payload).toBe(false)
+    expect('userId' in payload).toBe(false)
   })
 
   it('omite el id cuando no está disponible y rechaza ObjectIds inválidos', () => {
-    const withoutId = buildPatientMePayload({
-      firstName: 'Juan',
-      lastName: 'García',
-    })
+    const withoutId = buildPatientMePayload({ observations: 'ok' })
     expect('id' in withoutId).toBe(false)
 
     expect(() =>
-      buildPatientMePayload({
-        id: 'no-es-un-objectid',
-        firstName: 'Juan',
-        lastName: 'García',
-      }),
+      buildPatientMePayload({ id: 'no-es-un-objectid' }),
     ).toThrow(/ObjectId/)
 
-    expect(() =>
-      buildPatientMePayload({
-        id: '   ',
-        firstName: 'Juan',
-        lastName: 'García',
-      }),
-    ).not.toThrow()
-    expect(
-      'id' in
-        buildPatientMePayload({
-          id: '   ',
-          firstName: 'Juan',
-          lastName: 'García',
-        }),
-    ).toBe(false)
+    expect(() => buildPatientMePayload({ id: '   ' })).not.toThrow()
+    expect('id' in buildPatientMePayload({ id: '   ' })).toBe(false)
+    expect('id' in buildPatientMePayload({ id: null })).toBe(false)
   })
 })
 

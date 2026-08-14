@@ -41,7 +41,6 @@ import type {
   EmergencyContact,
   PatientMe,
   PatientMeCompatibility,
-  PatientMeRequest,
 } from '../types/patient.types'
 import type { Plan, UserPlanSubscription } from '../types/plan.types'
 import type { DailyStatistic } from '../types/statistics.types'
@@ -759,45 +758,50 @@ export const apiClient = {
 }
 
 /**
- * Datos del paciente que alimentan `PUT /api/patients/me`. La UI puede
- * manejar `secondLastName` por separado; al construir el payload los apellidos
- * se concatenan y solo `firstName`/`lastName` viajan al backend. El payload
- * es un objeto plano con los campos que se desean actualizar (patch parcial)
- * y SIEMPRE incluye el `id` del paciente: el backend lo exige (validación
- * `[Required]` sobre la propiedad `Id`) para identificar el perfil a actualizar.
+ * Datos que alimentan `PUT /api/patients/me` (patch parcial). El payload se
+ * sanea antes de enviar: SOLO viajan los campos que la API acepta actualizar
+ * (`weight`, `height`, `bloodType`, `phone`, `address`, `observations`,
+ * `medications`, `emergencyContacts`). Campos como `initialDiagnosis`,
+ * `assignedDoctor`, `firstName`, `lastName`, `dateOfBirth`, `gender` o ids
+ * nulos NO se envían: el backend los rechaza con 400.
  */
 export interface PatientMeUpdateInput {
   /**
    * Id del paciente (ObjectId MongoDB, 24 caracteres hexadecimales) tal como
-   * lo devuelve `GET /api/patients/me`. Obligatorio en `PUT /api/patients/me`:
-   * viaja como `id` en el cuerpo JSON (camelCase → `Id` del modelo ASP.NET).
-   * La UI lo recupera del perfil cargado o recargándolo con `GET /api/patients/me`.
+   * lo devuelve `GET /api/patients/me`. Obligatorio en `PUT /api/patients/me`
+   * (400 "The Id field is required" si falta); viaja como `id` en minúscula
+   * (camelCase → `Id` del modelo ASP.NET). Si no está disponible, se omite:
+   * nunca se envía `id: null` ni `userId`.
    */
   id?: string | null
-  firstName?: string
-  lastName?: string
-  secondLastName?: string | null
-  phone?: PatientMeRequest['phone']
-  dateOfBirth?: PatientMeRequest['dateOfBirth']
-  gender?: PatientMeRequest['gender']
-  bloodType?: PatientMeRequest['bloodType']
-  emergencyContactName?: PatientMeRequest['emergencyContactName']
-  emergencyContactPhone?: PatientMeRequest['emergencyContactPhone']
-  address?: PatientMeRequest['address']
-  initialDiagnosis?: PatientMeRequest['initialDiagnosis']
-  assignedDoctor?: PatientMeRequest['assignedDoctor']
-  observations?: PatientMeRequest['observations']
-  medications?: PatientMeRequest['medications']
-  emergencyContacts?: PatientMeRequest['emergencyContacts']
+  weight?: number | null
+  height?: number | null
+  bloodType?: string | null
+  phone?: string | null
+  address?: string | null
+  observations?: string | null
+  medications?: string[] | null
+  emergencyContacts?: EmergencyContact[] | null
 }
 
 /** ObjectId de MongoDB: 24 caracteres hexadecimales (válido para PUT /api/patients/me). */
 const PATIENT_ID_REGEX = /^[0-9a-fA-F]{24}$/
 
+/** La API acepta como máximo 3 contactos de emergencia en `emergencyContacts`. */
+const MAX_EMERGENCY_CONTACTS = 3
+
+/**
+ * Construye y sanea el payload de `PUT /api/patients/me`:
+ * - `id` solo viaja si es un ObjectId hexadecimal de 24 caracteres (en
+ *   minúscula `id`); nunca se envía `id` nulo, `userId` ni campos de solo
+ *   lectura (`initialDiagnosis`, `assignedDoctor`, etc.).
+ * - Los contactos de emergencia se mapean a `{ name, relationship, phone,
+ *   email, isPrimary }`, descartando `id`/`userId` internos, con máximo 3.
+ */
 export function buildPatientMePayload(
   input: PatientMeUpdateInput,
-): Partial<PatientMeRequest> {
-  const payload: Partial<PatientMeRequest> = {}
+): Partial<PatientMeUpdateInput> {
+  const payload: Partial<PatientMeUpdateInput> = {}
   // El backend exige `id` en el cuerpo de PUT /api/patients/me (400 "The Id
   // field is required" si falta). Si viene presente pero no es un ObjectId
   // hexadecimal de 24 caracteres, se falla de forma explícita antes de enviar.
@@ -810,43 +814,26 @@ export function buildPatientMePayload(
     }
     payload.id = patientId
   }
-  if (input.firstName !== undefined) {
-    payload.firstName = input.firstName.trim()
+  if (input.weight !== undefined) {
+    payload.weight =
+      typeof input.weight === 'number' && Number.isFinite(input.weight)
+        ? input.weight
+        : null
   }
-  if (input.lastName !== undefined || input.secondLastName !== undefined) {
-    const lastNameParts = [input.lastName, input.secondLastName].filter(
-      (part): part is string => typeof part === 'string' && part.trim() !== '',
-    )
-    if (lastNameParts.length > 0) {
-      payload.lastName = lastNameParts.join(' ').trim()
-    }
+  if (input.height !== undefined) {
+    payload.height =
+      typeof input.height === 'number' && Number.isFinite(input.height)
+        ? input.height
+        : null
+  }
+  if (input.bloodType !== undefined) {
+    payload.bloodType = input.bloodType === null ? null : asString(input.bloodType)
   }
   if (input.phone !== undefined) {
     payload.phone = input.phone ?? null
   }
-  if (input.dateOfBirth !== undefined) {
-    payload.dateOfBirth = input.dateOfBirth ?? null
-  }
-  if (input.gender !== undefined) {
-    payload.gender = input.gender ?? null
-  }
-  if (input.bloodType !== undefined) {
-    payload.bloodType = input.bloodType ?? null
-  }
-  if (input.emergencyContactName !== undefined) {
-    payload.emergencyContactName = input.emergencyContactName ?? null
-  }
-  if (input.emergencyContactPhone !== undefined) {
-    payload.emergencyContactPhone = input.emergencyContactPhone ?? null
-  }
   if (input.address !== undefined) {
     payload.address = input.address ?? null
-  }
-  if (input.initialDiagnosis !== undefined) {
-    payload.initialDiagnosis = input.initialDiagnosis ?? null
-  }
-  if (input.assignedDoctor !== undefined) {
-    payload.assignedDoctor = input.assignedDoctor ?? null
   }
   if (input.observations !== undefined) {
     payload.observations = input.observations ?? null
@@ -856,16 +843,22 @@ export function buildPatientMePayload(
       input.medications === null ? null : toStringArray(input.medications)
   }
   if (input.emergencyContacts !== undefined) {
-    payload.emergencyContacts =
-      input.emergencyContacts === null
-        ? null
-        : input.emergencyContacts.map((contact) => ({
-            name: asString(contact?.name) ?? '',
-            relationship: asString(contact?.relationship) ?? '',
-            phone: asString(contact?.phone) ?? '',
-            email: asString(contact?.email),
-            isPrimary: contact?.isPrimary === true,
-          }))
+    if (input.emergencyContacts === null) {
+      payload.emergencyContacts = null
+    } else {
+      if (input.emergencyContacts.length > MAX_EMERGENCY_CONTACTS) {
+        throw new Error(
+          `La API admite como máximo ${MAX_EMERGENCY_CONTACTS} contactos de emergencia.`,
+        )
+      }
+      payload.emergencyContacts = input.emergencyContacts.map((contact) => ({
+        name: asString(contact?.name) ?? '',
+        relationship: asString(contact?.relationship) ?? '',
+        phone: asString(contact?.phone) ?? '',
+        email: asString(contact?.email),
+        isPrimary: contact?.isPrimary === true,
+      }))
+    }
   }
   // Solo el `id` viaja como identificador (camelCase → `Id` del modelo
   // ASP.NET); no se agregan wrappers adicionales con `Id`/`patientId`.
@@ -886,17 +879,20 @@ export async function getPatientMe(): Promise<
 
 /**
  * Actualiza el perfil del paciente autenticado con `PUT /api/patients/me`.
- * El payload es un objeto plano (patch parcial) que incluye obligatoriamente
- * el `id` del paciente (ObjectId de 24 caracteres) recuperado de
- * `GET /api/patients/me`; sin él el backend responde 400 "The Id field is
- * required". Devuelve el perfil normalizado tras el guardado.
+ * El payload es un objeto plano (patch parcial) saneado: SOLO incluye los
+ * campos que la API acepta (`weight`, `height`, `bloodType`, `phone`,
+ * `address`, `observations`, `medications`, `emergencyContacts`) más el `id`
+ * del paciente (ObjectId de 24 caracteres) recuperado de `GET /api/patients/me`.
+ * Devuelve el perfil normalizado tras el guardado.
  */
 export async function updatePatientMe(
   input: PatientMeUpdateInput,
 ): Promise<PatientMe & PatientMeCompatibility> {
+  const payload = buildPatientMePayload(input)
+  console.log('Payload enviado a PUT /api/patients/me:', JSON.stringify(payload))
   const profile = await apiClient.put<PatientMe>(
     API_ENDPOINTS.patients.me,
-    buildPatientMePayload(input),
+    payload,
   )
   return normalizePatientMe(profile)
 }

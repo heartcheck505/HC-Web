@@ -325,11 +325,10 @@ export default function Pacientes() {
         .map((item) => item.trim())
         .filter((item) => item !== '')
       // Patch parcial de PUT /api/patients/me: el `id` del paciente viaja
-      // obligatoriamente junto a los campos clínicos editados.
+      // obligatoriamente junto a los campos que la API acepta. `initialDiagnosis`
+      // y `assignedDoctor` NO se envían: el backend los rechaza con 400.
       const updated = await updatePatientMe({
         id: patientId,
-        initialDiagnosis: clinicalForm.initialDiagnosis.trim() || null,
-        assignedDoctor: clinicalForm.assignedDoctor.trim() || null,
         observations: clinicalForm.observations.trim() || null,
         medications,
         emergencyContacts: [
