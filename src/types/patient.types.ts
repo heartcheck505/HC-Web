@@ -19,9 +19,9 @@ export interface EmergencyContact {
  * Perfil del paciente autenticado tal como lo espera la API de producción en
  * `GET/PUT /api/patients/me`. Los apellidos se envían concatenados en
  * `lastName`; el frontend nunca envía `secondLastName`. El payload de `PUT`
- * es un objeto plano (patch parcial) que SIEMPRE incluye el `id` del paciente:
- * el backend lo exige (400 "The Id field is required" si falta) para saber qué
- * perfil actualizar.
+ * es un objeto plano (patch parcial) que SIEMPRE incluye el `id`/`Id` del
+ * paciente: el backend lo exige (400 "The Id field is required" si falta)
+ * para saber qué perfil actualizar.
  */
 export interface PatientMeRequest {
   /**
@@ -30,9 +30,13 @@ export interface PatientMeRequest {
    * (camelCase → `Id` del modelo ASP.NET).
    */
   id?: string | null
+  /** Id del paciente en PascalCase, requerido por la validación de ASP.NET. */
+  Id?: string | null
   firstName: string
   lastName: string
   phone?: string | null
+  weight?: number | null
+  height?: number | null
   dateOfBirth?: string | null
   gender?: Gender | null
   bloodType?: BloodGroup | null

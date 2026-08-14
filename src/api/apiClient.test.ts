@@ -352,13 +352,15 @@ describe('ruta inicial según licencia', () => {
 })
 
 describe('buildPatientMePayload', () => {
-  it('envía SOLO los campos válidos de PUT /api/patients/me (whitelist)', () => {
+  it('envía los campos clínicos y de contacto de PUT /api/patients/me', () => {
     const payload = buildPatientMePayload({
       weight: 76,
       height: 1.78,
       bloodType: 'O+',
       phone: '555-1234',
       address: 'Calle 1 #23',
+      initialDiagnosis: 'Hipertensión arterial',
+      assignedDoctor: 'Dra. Pérez',
       observations: 'Requiere control mensual.',
       medications: ['Atorvastatina 10 mg'],
       emergencyContacts: [
@@ -371,6 +373,8 @@ describe('buildPatientMePayload', () => {
       bloodType: 'O+',
       phone: '555-1234',
       address: 'Calle 1 #23',
+      initialDiagnosis: 'Hipertensión arterial',
+      assignedDoctor: 'Dra. Pérez',
       observations: 'Requiere control mensual.',
       medications: ['Atorvastatina 10 mg'],
       emergencyContacts: [
@@ -384,8 +388,6 @@ describe('buildPatientMePayload', () => {
       ],
     })
     // Campos no soportados por la API: jamás viajan en el payload.
-    expect('initialDiagnosis' in payload).toBe(false)
-    expect('assignedDoctor' in payload).toBe(false)
     expect('firstName' in payload).toBe(false)
     expect('lastName' in payload).toBe(false)
     expect('dateOfBirth' in payload).toBe(false)
@@ -393,14 +395,15 @@ describe('buildPatientMePayload', () => {
     expect('emergencyContactName' in payload).toBe(false)
     expect('emergencyContactPhone' in payload).toBe(false)
     expect('userId' in payload).toBe(false)
-    expect('Id' in payload).toBe(false)
     expect('patientId' in payload).toBe(false)
     expect(Object.keys(payload).sort()).toEqual(
       [
         'address',
+        'assignedDoctor',
         'bloodType',
         'emergencyContacts',
         'height',
+        'initialDiagnosis',
         'medications',
         'observations',
         'phone',
@@ -413,11 +416,14 @@ describe('buildPatientMePayload', () => {
     const payload = buildPatientMePayload({})
     expect(payload).toEqual({})
     expect('id' in payload).toBe(false)
+    expect('Id' in payload).toBe(false)
     expect('weight' in payload).toBe(false)
     expect('height' in payload).toBe(false)
     expect('bloodType' in payload).toBe(false)
     expect('phone' in payload).toBe(false)
     expect('address' in payload).toBe(false)
+    expect('initialDiagnosis' in payload).toBe(false)
+    expect('assignedDoctor' in payload).toBe(false)
     expect('observations' in payload).toBe(false)
     expect('medications' in payload).toBe(false)
     expect('emergencyContacts' in payload).toBe(false)
@@ -474,24 +480,29 @@ describe('buildPatientMePayload', () => {
     )
   })
 
-  it('incluye el id del paciente (ObjectId de 24 caracteres) en el payload de PUT /api/patients/me', () => {
+  it('incluye el id del paciente como id (camelCase) e Id (PascalCase) en el payload de PUT /api/patients/me', () => {
     const objectId = '664f0c2a9d3b4c0012ab34cd'
     const payload = buildPatientMePayload({
       id: objectId,
+      initialDiagnosis: 'Hipertensión arterial',
+      assignedDoctor: 'Dra. Pérez',
       observations: 'Hipertensión bajo control.',
     })
     expect(payload).toMatchObject({
       id: objectId,
+      Id: objectId,
+      initialDiagnosis: 'Hipertensión arterial',
+      assignedDoctor: 'Dra. Pérez',
       observations: 'Hipertensión bajo control.',
     })
-    expect('Id' in payload).toBe(false)
     expect('patientId' in payload).toBe(false)
     expect('userId' in payload).toBe(false)
   })
 
-  it('omite el id cuando no está disponible y rechaza ObjectIds inválidos', () => {
+  it('omite el id/Id cuando no está disponible y rechaza ObjectIds inválidos', () => {
     const withoutId = buildPatientMePayload({ observations: 'ok' })
     expect('id' in withoutId).toBe(false)
+    expect('Id' in withoutId).toBe(false)
 
     expect(() =>
       buildPatientMePayload({ id: 'no-es-un-objectid' }),
@@ -499,7 +510,9 @@ describe('buildPatientMePayload', () => {
 
     expect(() => buildPatientMePayload({ id: '   ' })).not.toThrow()
     expect('id' in buildPatientMePayload({ id: '   ' })).toBe(false)
+    expect('Id' in buildPatientMePayload({ id: '   ' })).toBe(false)
     expect('id' in buildPatientMePayload({ id: null })).toBe(false)
+    expect('Id' in buildPatientMePayload({ id: null })).toBe(false)
   })
 })
 

@@ -365,7 +365,10 @@ export default function DashboardPremium() {
   const filteredEvents = useMemo<Alert[]>(() => {
     const cutoff =
       Date.now() - Number(dayRange) * 24 * 60 * 60 * 1000
+    // `.filter(Boolean)` descarta elementos nulos/indefinidos que la API
+    // pudiera devolver dentro del arreglo antes de cualquier acceso.
     return events
+      .filter(Boolean)
       .filter(
         (event) =>
           severityFilter === 'Todos' || event.severity === severityFilter,
@@ -743,6 +746,8 @@ export default function DashboardPremium() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredEvents.map((event) => {
+                      // La API podría devolver un `status` fuera del mapa
+                      // conocido: encadenamiento opcional + fallback seguro.
                       const statusStyle = eventStatusStyles[event.status]
                       return (
                         <tr key={event.id} className="transition-colors hover:bg-slate-50/60">
@@ -756,9 +761,11 @@ export default function DashboardPremium() {
                           </td>
                           <td className="px-4 py-3.5">
                             <span
-                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusStyle.badge}`}
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                statusStyle?.badge ?? 'bg-slate-100 text-slate-600'
+                              }`}
                             >
-                              {statusStyle.label}
+                              {statusStyle?.label ?? event.status}
                             </span>
                           </td>
                           <td className="whitespace-nowrap text-slate-600">
@@ -851,10 +858,12 @@ export default function DashboardPremium() {
                 <dd>
                   <span
                     className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                      eventStatusStyles[detailEvent.status].badge
+                      eventStatusStyles[detailEvent.status]?.badge ??
+                      'bg-slate-100 text-slate-600'
                     }`}
                   >
-                    {eventStatusStyles[detailEvent.status].label}
+                    {eventStatusStyles[detailEvent.status]?.label ??
+                      detailEvent.status}
                   </span>
                 </dd>
               </div>

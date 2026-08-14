@@ -41,6 +41,7 @@ import type {
   EmergencyContact,
   PatientMe,
   PatientMeCompatibility,
+  PatientMeRequest,
 } from '../types/patient.types'
 import type { Plan, UserPlanSubscription } from '../types/plan.types'
 import type { DailyStatistic } from '../types/statistics.types'
@@ -759,19 +760,19 @@ export const apiClient = {
 
 /**
  * Datos que alimentan `PUT /api/patients/me` (patch parcial). El payload se
- * sanea antes de enviar: SOLO viajan los campos que la API acepta actualizar
- * (`weight`, `height`, `bloodType`, `phone`, `address`, `observations`,
- * `medications`, `emergencyContacts`). Campos como `initialDiagnosis`,
- * `assignedDoctor`, `firstName`, `lastName`, `dateOfBirth`, `gender` o ids
- * nulos NO se envían: el backend los rechaza con 400.
+ * sanea antes de enviar y SOLO incluye los campos que la API acepta:
+ * `initialDiagnosis`, `assignedDoctor`, `observations`, `medications`,
+ * `emergencyContacts`, `weight`, `height`, `bloodType`, `phone` y `address`.
+ * Campos como `firstName`, `lastName`, `dateOfBirth`, `gender` o ids nulos
+ * NO se envían: el backend los rechaza con 400.
  */
 export interface PatientMeUpdateInput {
   /**
    * Id del paciente (ObjectId MongoDB, 24 caracteres hexadecimales) tal como
    * lo devuelve `GET /api/patients/me`. Obligatorio en `PUT /api/patients/me`
-   * (400 "The Id field is required" si falta); viaja como `id` en minúscula
-   * (camelCase → `Id` del modelo ASP.NET). Si no está disponible, se omite:
-   * nunca se envía `id: null` ni `userId`.
+   * (400 "The Id field is required" si falta); viaja como `id` y `Id` para
+   * cubrir la convención de naming del modelo ASP.NET. Si no está disponible,
+   * se omite: nunca se envía `id: null` ni `userId`.
    */
   id?: string | null
   weight?: number | null
@@ -779,6 +780,8 @@ export interface PatientMeUpdateInput {
   bloodType?: string | null
   phone?: string | null
   address?: string | null
+  initialDiagnosis?: string | null
+  assignedDoctor?: string | null
   observations?: string | null
   medications?: string[] | null
   emergencyContacts?: EmergencyContact[] | null
@@ -792,16 +795,16 @@ const MAX_EMERGENCY_CONTACTS = 3
 
 /**
  * Construye y sanea el payload de `PUT /api/patients/me`:
- * - `id` solo viaja si es un ObjectId hexadecimal de 24 caracteres (en
- *   minúscula `id`); nunca se envía `id` nulo, `userId` ni campos de solo
- *   lectura (`initialDiagnosis`, `assignedDoctor`, etc.).
+ * - `id`/`Id` solo viajan si es un ObjectId hexadecimal de 24 caracteres
+ *   (camelCase y PascalCase para cubrir la validación `[Required]` de
+ *   ASP.NET); nunca se envía `id` nulo, `userId` ni campos de solo lectura.
  * - Los contactos de emergencia se mapean a `{ name, relationship, phone,
  *   email, isPrimary }`, descartando `id`/`userId` internos, con máximo 3.
  */
 export function buildPatientMePayload(
   input: PatientMeUpdateInput,
-): Partial<PatientMeUpdateInput> {
-  const payload: Partial<PatientMeUpdateInput> = {}
+): Partial<PatientMeRequest> {
+  const payload: Partial<PatientMeRequest> = {}
   // El backend exige `id` en el cuerpo de PUT /api/patients/me (400 "The Id
   // field is required" si falta). Si viene presente pero no es un ObjectId
   // hexadecimal de 24 caracteres, se falla de forma explícita antes de enviar.
@@ -812,7 +815,10 @@ export function buildPatientMePayload(
         'El identificador del paciente no es un ObjectId válido (se esperan 24 caracteres hexadecimales).',
       )
     }
+    // `id` (camelCase) y `Id` (PascalCase): ambas variantes cubren la
+    // deserialización del modelo ASP.NET sin wrappers adicionales.
     payload.id = patientId
+    payload.Id = patientId
   }
   if (input.weight !== undefined) {
     payload.weight =
@@ -827,13 +833,22 @@ export function buildPatientMePayload(
         : null
   }
   if (input.bloodType !== undefined) {
-    payload.bloodType = input.bloodType === null ? null : asString(input.bloodType)
+    payload.bloodType =
+      input.bloodType === null
+        ? null
+        : (asString(input.bloodType) as PatientMeRequest['bloodType'])
   }
   if (input.phone !== undefined) {
     payload.phone = input.phone ?? null
   }
   if (input.address !== undefined) {
     payload.address = input.address ?? null
+  }
+  if (input.initialDiagnosis !== undefined) {
+    payload.initialDiagnosis = input.initialDiagnosis ?? null
+  }
+  if (input.assignedDoctor !== undefined) {
+    payload.assignedDoctor = input.assignedDoctor ?? null
   }
   if (input.observations !== undefined) {
     payload.observations = input.observations ?? null
@@ -879,10 +894,11 @@ export async function getPatientMe(): Promise<
 
 /**
  * Actualiza el perfil del paciente autenticado con `PUT /api/patients/me`.
- * El payload es un objeto plano (patch parcial) saneado: SOLO incluye los
- * campos que la API acepta (`weight`, `height`, `bloodType`, `phone`,
- * `address`, `observations`, `medications`, `emergencyContacts`) más el `id`
- * del paciente (ObjectId de 24 caracteres) recuperado de `GET /api/patients/me`.
+ * El payload es un objeto plano (patch parcial) saneado que incluye los campos
+ * clínicos soportados por la API (`initialDiagnosis`, `assignedDoctor`,
+ * `observations`, `medications`, `emergencyContacts`, `weight`, `height`,
+ * `bloodType`, `phone`, `address`) más el `id`/`Id` del paciente (ObjectId de
+ * 24 caracteres) recuperado de `GET /api/patients/me`.
  * Devuelve el perfil normalizado tras el guardado.
  */
 export async function updatePatientMe(

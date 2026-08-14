@@ -145,11 +145,13 @@ const FALLBACK_PATIENT: PatientProfile = {
 }
 
 function toArray<T>(payload: T[] | PagedResult<T> | null | undefined): T[] {
+  // `.filter(Boolean)` descarta elementos nulos/indefinidos que la API
+  // pudiera devolver dentro del arreglo antes de cualquier acceso.
   if (Array.isArray(payload)) {
-    return payload
+    return payload.filter(Boolean)
   }
   if (payload && Array.isArray(payload.items)) {
-    return payload.items
+    return payload.items.filter(Boolean)
   }
   return []
 }
@@ -325,10 +327,13 @@ export default function Pacientes() {
         .map((item) => item.trim())
         .filter((item) => item !== '')
       // Patch parcial de PUT /api/patients/me: el `id` del paciente viaja
-      // obligatoriamente junto a los campos que la API acepta. `initialDiagnosis`
-      // y `assignedDoctor` NO se envían: el backend los rechaza con 400.
+      // obligatoriamente junto a los campos clínicos que la API soporta
+      // (initialDiagnosis, assignedDoctor, observations, medications y
+      // emergencyContacts).
       const updated = await updatePatientMe({
         id: patientId,
+        initialDiagnosis: clinicalForm.initialDiagnosis.trim() || null,
+        assignedDoctor: clinicalForm.assignedDoctor.trim() || null,
         observations: clinicalForm.observations.trim() || null,
         medications,
         emergencyContacts: [

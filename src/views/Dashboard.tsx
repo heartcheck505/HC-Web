@@ -69,7 +69,7 @@ export default function Dashboard() {
       patientsResult.status === 'fulfilled' ? patientsResult.value.totalItems : 0
     const alerts =
       alertsResult.status === 'fulfilled' && Array.isArray(alertsResult.value)
-        ? alertsResult.value
+        ? alertsResult.value.filter(Boolean)
         : []
 
     const failures = [summaryResult, patientsResult, alertsResult].filter(
@@ -170,6 +170,8 @@ export default function Dashboard() {
         ) : (
           <ul className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {state.alerts.map((alert) => {
+              // La API podría devolver una `severity` fuera del mapa conocido:
+              // encadenamiento opcional + fallback seguro para dot/badge.
               const styles = severityStyles[alert.severity]
               return (
                 <li
@@ -177,7 +179,7 @@ export default function Dashboard() {
                   className="flex items-center gap-4 px-5 py-4"
                 >
                   <span
-                    className={`size-2.5 shrink-0 rounded-full ${styles.dot}`}
+                    className={`size-2.5 shrink-0 rounded-full ${styles?.dot ?? 'bg-slate-400'}`}
                     aria-hidden="true"
                   />
                   <div className="min-w-0 flex-1">
@@ -189,7 +191,7 @@ export default function Dashboard() {
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${styles.badge}`}
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${styles?.badge ?? 'bg-slate-100 text-slate-600'}`}
                   >
                     {alert.severity}
                   </span>
