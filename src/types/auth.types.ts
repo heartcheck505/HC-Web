@@ -113,10 +113,19 @@ export interface StoredPatient {
   emergencyContactPhone?: string | null
 }
 
+/**
+ * Respuesta exacta de `POST /api/auth/login`: `{ token, email, firstName,
+ * lastName }`. Se aceptan también `user`/`expiresAt` para compatibilidad con
+ * variantes del backend; `normalizeStoredUser` deriva el perfil de la sesión
+ * desde los campos planos o anidados.
+ */
 export interface LoginResponse {
   token: string
-  user: UserDto
-  expiresAt: string
+  email?: string
+  firstName?: string
+  lastName?: string
+  user?: UserDto
+  expiresAt?: string
 }
 
 export interface AuthErrorResponse {

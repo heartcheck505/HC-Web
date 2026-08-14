@@ -5,15 +5,12 @@
  * - El token JWT jamás se compromete en el código; se lee desde
  *   `sessionStorage` y se adjunta automáticamente al header
  *   `Authorization: Bearer <TOKEN>`.
- * - La URL base (`API_BASE_URL`) se resuelve en `resolveApiBaseUrl()`: overrides
- *   `VITE_API_BASE_URL_HTTPS` / `VITE_API_BASE_URL`; en Render
- *   (`window.location.host` con `onrender.com`) usa la ruta relativa `/api`
- *   (el servidor `server/index.mjs` reenvía `/api/*` al backend, ver
- *   `render.yaml`); sin variables, el protocolo se adapta al origen de la app
- *   (HTTPS → API HTTPS) para evitar Mixed Content. La CSP (meta de
+ * - La URL base (`API_BASE_URL`) se resuelve en `resolveApiBaseUrl()`:
+ *   `VITE_API_BASE_URL` como override explícito y, sin variable, el fallback
+ *   por defecto `http://heartcheckapi.runasp.net/api`. La CSP (meta de
  *   `index.html` y la inyectada por `vite.config.ts`) no contiene
- *   `upgrade-insecure-requests`, admite `'self'` (cubre `/api` relativo) y
- *   `http://`/`https://` con comodines `*.runasp.net`.
+ *   `upgrade-insecure-requests` y admite `'self'`, `http://`/`https://` con
+ *   comodines `*.runasp.net`, `ws:`/`wss:` y `data:`/`blob:`.
  * - Cortocircuito de datos de prueba: cuando `shouldUseMockData()` es
  *   verdadero (sin token o `VITE_USE_MOCK_DATA=true`), ninguna petición
  *   `GET` sale a la red: se lanza un `ApiError` simulado (status 0) que los
@@ -51,53 +48,17 @@ import type { DailyStatistic } from '../types/statistics.types'
 
 /**
  * Resuelve la URL base de la API con esta prioridad:
- * 1. `VITE_API_BASE_URL_HTTPS` — fuerza HTTPS explícito (si runasp.net llega
- *    a exponer un subdominio SSL).
- * 2. `VITE_API_BASE_URL` — override explícito; admite una ruta relativa
- *    (`/api`) cuando Render/Vite/servidor proxy reenvía el mismo origen, o
- *    una URL absoluta.
- * 3. Entorno Render (`window.location.host` termina en `onrender.com`):
- *    ruta relativa `/api` — el servidor de producción (`server/index.mjs`,
- *    ver `render.yaml`) reenvía `/api/*` a
- *    `http://heartcheckapi.runasp.net/api/*` internamente, evitando llamadas
- *    directas del navegador al dominio externo (ERR_CONNECTION_RESET /
- *    ERR_TIMED_OUT / Mixed Content).
- * 4. Sin variables: el protocolo se adapta al origen de la app para nunca
- *    mezclar HTTP/HTTPS (HTTPS → `https://heartcheckapi.runasp.net/api`).
+ * 1. `VITE_API_BASE_URL` — override explícito de entorno (Vite); puede ser
+ *    una ruta relativa (`/api`) o una URL absoluta.
+ * 2. Sin variable definida: fallback por defecto
+ *    `http://heartcheckapi.runasp.net/api`.
  */
 function resolveApiBaseUrl(): string {
-  const explicitHttps = import.meta.env.VITE_API_BASE_URL_HTTPS
-  if (explicitHttps) {
-    return explicitHttps.replace(/\/+$/, '')
-  }
   const explicit = import.meta.env.VITE_API_BASE_URL
   if (explicit) {
     return explicit.replace(/\/+$/, '')
   }
-  try {
-    if (
-      typeof window !== 'undefined' &&
-      window.location &&
-      window.location.host.includes('onrender.com')
-    ) {
-      return '/api'
-    }
-  } catch {
-    // Sin acceso a window (SSR/tests): se continúa con el protocolo por defecto.
-  }
-  let protocol = 'http:'
-  try {
-    if (
-      typeof window !== 'undefined' &&
-      window.location &&
-      window.location.protocol === 'https:'
-    ) {
-      protocol = 'https:'
-    }
-  } catch {
-    protocol = 'http:'
-  }
-  return `${protocol}//heartcheckapi.runasp.net/api`
+  return 'http://heartcheckapi.runasp.net/api'
 }
 
 export const API_BASE_URL: string = resolveApiBaseUrl()
@@ -798,20 +759,16 @@ export const apiClient = {
 }
 
 /**
- * Datos del paciente que alimentan `GET/PUT /api/patients/me`. La UI puede
+ * Datos del paciente que alimentan `PUT /api/patients/me`. La UI puede
  * manejar `secondLastName` por separado; al construir el payload los apellidos
- * se concatenan y solo `firstName`/`lastName` viajan al backend.
+ * se concatenan y solo `firstName`/`lastName` viajan al backend. El backend
+ * identifica al usuario mediante el claim `sub` del token JWT, por lo que el
+ * payload nunca incluye `Id`, `id` ni `patientId`: es un objeto plano con los
+ * campos que se desean actualizar (patch parcial).
  */
 export interface PatientMeUpdateInput {
-  /**
-   * Id del paciente tal como lo devolvió `GET /api/patients/me`. El backend
-   * (ASP.NET Core) valida el campo `Id` como requerido en `PUT`: si la UI lo
-   * tiene, viaja en el cuerpo; si no, el campo se omite por completo (nunca
-   * se envía un `id` vacío o `null`).
-   */
-  id?: string | null
-  firstName: string
-  lastName: string
+  firstName?: string
+  lastName?: string
   secondLastName?: string | null
   phone?: PatientMeRequest['phone']
   dateOfBirth?: PatientMeRequest['dateOfBirth']
@@ -829,27 +786,56 @@ export interface PatientMeUpdateInput {
 
 export function buildPatientMePayload(
   input: PatientMeUpdateInput,
-): PatientMeRequest {
-  const lastNameParts = [input.lastName, input.secondLastName].filter(
-    (part): part is string => typeof part === 'string' && part.trim() !== '',
-  )
-  const payload: PatientMeRequest = {
-    firstName: input.firstName.trim(),
-    lastName: lastNameParts.join(' ').trim(),
-    phone: input.phone ?? null,
-    dateOfBirth: input.dateOfBirth ?? null,
-    gender: input.gender ?? null,
-    bloodType: input.bloodType ?? null,
-    emergencyContactName: input.emergencyContactName ?? null,
-    emergencyContactPhone: input.emergencyContactPhone ?? null,
-    address: input.address ?? null,
-    initialDiagnosis: input.initialDiagnosis ?? null,
-    assignedDoctor: input.assignedDoctor ?? null,
-    observations: input.observations ?? null,
-    medications:
-      input.medications === undefined ? null : toStringArray(input.medications),
-    emergencyContacts:
-      input.emergencyContacts == null
+): Partial<PatientMeRequest> {
+  const payload: Partial<PatientMeRequest> = {}
+  if (input.firstName !== undefined) {
+    payload.firstName = input.firstName.trim()
+  }
+  if (input.lastName !== undefined || input.secondLastName !== undefined) {
+    const lastNameParts = [input.lastName, input.secondLastName].filter(
+      (part): part is string => typeof part === 'string' && part.trim() !== '',
+    )
+    if (lastNameParts.length > 0) {
+      payload.lastName = lastNameParts.join(' ').trim()
+    }
+  }
+  if (input.phone !== undefined) {
+    payload.phone = input.phone ?? null
+  }
+  if (input.dateOfBirth !== undefined) {
+    payload.dateOfBirth = input.dateOfBirth ?? null
+  }
+  if (input.gender !== undefined) {
+    payload.gender = input.gender ?? null
+  }
+  if (input.bloodType !== undefined) {
+    payload.bloodType = input.bloodType ?? null
+  }
+  if (input.emergencyContactName !== undefined) {
+    payload.emergencyContactName = input.emergencyContactName ?? null
+  }
+  if (input.emergencyContactPhone !== undefined) {
+    payload.emergencyContactPhone = input.emergencyContactPhone ?? null
+  }
+  if (input.address !== undefined) {
+    payload.address = input.address ?? null
+  }
+  if (input.initialDiagnosis !== undefined) {
+    payload.initialDiagnosis = input.initialDiagnosis ?? null
+  }
+  if (input.assignedDoctor !== undefined) {
+    payload.assignedDoctor = input.assignedDoctor ?? null
+  }
+  if (input.observations !== undefined) {
+    payload.observations = input.observations ?? null
+  }
+  if (input.medications !== undefined) {
+    payload.medications =
+      input.medications === null ? null : toStringArray(input.medications)
+  }
+  if (input.emergencyContacts !== undefined) {
+    payload.emergencyContacts =
+      input.emergencyContacts === null
         ? null
         : input.emergencyContacts.map((contact) => ({
             name: asString(contact?.name) ?? '',
@@ -857,19 +843,10 @@ export function buildPatientMePayload(
             phone: asString(contact?.phone) ?? '',
             email: asString(contact?.email),
             isPrimary: contact?.isPrimary === true,
-          })),
+          }))
   }
-  // El backend (ASP.NET Core) valida la propiedad `Id` como requerida en
-  // PUT /api/patients/me. Para cubrir la deserialización del modelo sin
-  // importar la convención de naming, el ObjectId del paciente viaja en las
-  // tres variantes: `Id` (PascalCase), `id` (camelCase) y `patientId`.
-  // Si no está disponible, el campo se omite por completo: nunca un id vacío.
-  if (typeof input.id === 'string' && input.id.trim() !== '') {
-    const patientId = input.id.trim()
-    payload.id = patientId
-    payload.Id = patientId
-    payload.patientId = patientId
-  }
+  // El backend identifica al paciente mediante el claim `sub` del token JWT:
+  // nunca se agregan wrappers con `Id`, `id` ni `patientId` al payload.
   return payload
 }
 
@@ -885,6 +862,12 @@ export async function getPatientMe(): Promise<
   return normalizePatientMe(profile)
 }
 
+/**
+ * Actualiza el perfil del paciente autenticado con `PUT /api/patients/me`.
+ * El payload es un objeto plano (patch parcial) sin `Id`/`id`/`patientId`: el
+ * backend identifica al usuario mediante el claim `sub` del token JWT.
+ * Devuelve el perfil normalizado tras el guardado.
+ */
 export async function updatePatientMe(
   input: PatientMeUpdateInput,
 ): Promise<PatientMe & PatientMeCompatibility> {

@@ -5,11 +5,9 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 
 const CSP_DIRECTIVES = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://images.unsplash.com",
+  "default-src 'self' 'unsafe-inline' 'unsafe-eval' http: https: data: blob:",
   "connect-src 'self' http://heartcheckapi.runasp.net https://heartcheckapi.runasp.net http://*.runasp.net https://*.runasp.net ws: wss:",
+  "img-src 'self' data: https: http: https://images.unsplash.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

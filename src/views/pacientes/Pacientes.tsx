@@ -290,45 +290,18 @@ export default function Pacientes() {
     setClinicalSaving(true)
     setClinicalError(null)
     try {
-      // El backend exige `Id` en PUT /api/patients/me: se garantiza que el
-      // ObjectId del paciente exista antes de enviar el payload. Si el perfil
-      // local no lo trae, se recarga con GET /api/patients/me.
-      let patientId = profile.id?.trim() || ''
-      if (!patientId) {
-        try {
-          const fresh = await getPatientMe()
-          patientId = fresh.id?.trim() || ''
-          setProfile(fresh)
-        } catch {
-          patientId = ''
-        }
-      }
-      if (!patientId) {
-        setClinicalError(
-          'No se pudo obtener el identificador del paciente. Cierra la sesión e inicia sesión de nuevo.',
-        )
-        return
-      }
       const medications = clinicalForm.medications
         .map((item) => item.trim())
         .filter((item) => item !== '')
+      // Patch parcial de PUT /api/patients/me: solo viajan los campos clínicos
+      // editados. El backend identifica al paciente mediante el claim `sub`
+      // del token JWT, por lo que el payload no incluye `Id`, `id` ni
+      // `patientId`.
       const updated = await updatePatientMe({
-        // Id del paciente (ObjectId): buildPatientMePayload lo envía como
-        // `Id`, `id` y `patientId` para satisfacer la validación del backend.
-        id: patientId,
-        firstName: profile.firstName,
-        lastName: profile.lastName,
-        phone: profile.phone,
-        dateOfBirth: profile.dateOfBirth,
-        gender: profile.gender,
-        bloodType: profile.bloodType,
-        address: profile.address,
         initialDiagnosis: clinicalForm.initialDiagnosis.trim() || null,
         assignedDoctor: clinicalForm.assignedDoctor.trim() || null,
         observations: clinicalForm.observations.trim() || null,
         medications,
-        emergencyContactName: clinicalForm.emergencyContactName.trim() || null,
-        emergencyContactPhone: clinicalForm.emergencyPhone.trim() || null,
         emergencyContacts: [
           {
             name: clinicalForm.emergencyContactName.trim(),

@@ -352,7 +352,7 @@ describe('ruta inicial según licencia', () => {
 })
 
 describe('buildPatientMePayload', () => {
-  it('envía solo los campos exactos de GET/PUT /api/patients/me', () => {
+  it('envía solo los campos editados de PUT /api/patients/me (patch parcial)', () => {
     const payload = buildPatientMePayload({
       firstName: 'Juan',
       lastName: 'García',
@@ -374,27 +374,22 @@ describe('buildPatientMePayload', () => {
       emergencyContactName: 'María García',
       emergencyContactPhone: '555-5678',
       address: 'Calle 1 #23',
-      initialDiagnosis: null,
-      assignedDoctor: null,
-      observations: null,
-      medications: null,
-      emergencyContacts: null,
     })
+    expect('initialDiagnosis' in payload).toBe(false)
+    expect('assignedDoctor' in payload).toBe(false)
+    expect('observations' in payload).toBe(false)
+    expect('medications' in payload).toBe(false)
+    expect('emergencyContacts' in payload).toBe(false)
     expect(Object.keys(payload).sort()).toEqual(
       [
         'address',
-        'assignedDoctor',
         'bloodType',
         'dateOfBirth',
         'emergencyContactName',
         'emergencyContactPhone',
-        'emergencyContacts',
         'firstName',
         'gender',
-        'initialDiagnosis',
         'lastName',
-        'medications',
-        'observations',
         'phone',
       ].sort(),
     )
@@ -410,22 +405,24 @@ describe('buildPatientMePayload', () => {
     expect('secondLastName' in payload).toBe(false)
   })
 
-  it('normaliza los campos opcionales a null', () => {
+  it('omite los campos no editados en lugar de enviar null (patch parcial)', () => {
     const payload = buildPatientMePayload({
       firstName: 'Ana',
       lastName: 'Pérez',
     })
-    expect(payload).toMatchObject({
-      firstName: 'Ana',
-      lastName: 'Pérez',
-      phone: null,
-      dateOfBirth: null,
-      gender: null,
-      bloodType: null,
-      emergencyContactName: null,
-      emergencyContactPhone: null,
-      address: null,
-    })
+    expect(payload).toEqual({ firstName: 'Ana', lastName: 'Pérez' })
+    expect('phone' in payload).toBe(false)
+    expect('dateOfBirth' in payload).toBe(false)
+    expect('gender' in payload).toBe(false)
+    expect('bloodType' in payload).toBe(false)
+    expect('emergencyContactName' in payload).toBe(false)
+    expect('emergencyContactPhone' in payload).toBe(false)
+    expect('address' in payload).toBe(false)
+    expect('initialDiagnosis' in payload).toBe(false)
+    expect('assignedDoctor' in payload).toBe(false)
+    expect('observations' in payload).toBe(false)
+    expect('medications' in payload).toBe(false)
+    expect('emergencyContacts' in payload).toBe(false)
   })
 
   it('incluye la información clínica y los contactos en el payload', () => {
@@ -463,7 +460,7 @@ describe('buildPatientMePayload', () => {
     })
   })
 
-  it('normaliza medications a arreglo plano y contactos vacíos a null', () => {
+  it('normaliza medications a arreglo plano y contactos vacíos', () => {
     const payload = buildPatientMePayload({
       firstName: 'Ana',
       lastName: 'Pérez',
@@ -478,42 +475,20 @@ describe('buildPatientMePayload', () => {
     ])
   })
 
-  it('envía el id en Id (PascalCase), id (camelCase) y patientId, y lo omite si no existe', () => {
-    const objectId = '664f0c2a9d3b4c0012ab34cd'
-    const withId = buildPatientMePayload({
-      id: objectId,
+  it('nunca envía Id, id ni patientId: el backend identifica al usuario por el claim sub del JWT', () => {
+    const payload = buildPatientMePayload({
       firstName: 'Juan',
       lastName: 'García',
+      initialDiagnosis: 'Hipertensión',
     })
-    expect(withId.id).toBe(objectId)
-    expect(withId.Id).toBe(objectId)
-    expect(withId.patientId).toBe(objectId)
-
-    const withoutId = buildPatientMePayload({
+    expect(payload).toMatchObject({
       firstName: 'Juan',
       lastName: 'García',
+      initialDiagnosis: 'Hipertensión',
     })
-    expect('id' in withoutId).toBe(false)
-    expect('Id' in withoutId).toBe(false)
-    expect('patientId' in withoutId).toBe(false)
-
-    const nullId = buildPatientMePayload({
-      id: null,
-      firstName: 'Juan',
-      lastName: 'García',
-    })
-    expect('id' in nullId).toBe(false)
-    expect('Id' in nullId).toBe(false)
-    expect('patientId' in nullId).toBe(false)
-
-    const blankId = buildPatientMePayload({
-      id: '   ',
-      firstName: 'Juan',
-      lastName: 'García',
-    })
-    expect('id' in blankId).toBe(false)
-    expect('Id' in blankId).toBe(false)
-    expect('patientId' in blankId).toBe(false)
+    expect('id' in payload).toBe(false)
+    expect('Id' in payload).toBe(false)
+    expect('patientId' in payload).toBe(false)
   })
 })
 
@@ -1142,37 +1117,16 @@ describe('login: POST /auth/login', () => {
     expect(response).toEqual({ token: 'jwt-nuevo', user: { id: 'u1' } })
   })
 
-  it('resuelve API_BASE_URL a HTTPS cuando la app corre en un origen HTTPS', async () => {
-    const httpsWindow = {
-      ...fakeWindow,
-      location: { ...fakeWindow.location, protocol: 'https:' },
-    }
-    ;(globalThis as unknown as { window: typeof httpsWindow }).window =
-      httpsWindow
+  it('usa VITE_API_BASE_URL cuando está definida (override de entorno)', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.heartcheck.example/api')
     vi.resetModules()
     const fresh = await import('./apiClient')
-    expect(fresh.API_BASE_URL).toBe('https://heartcheckapi.runasp.net/api')
+    expect(fresh.API_BASE_URL).toBe('https://api.heartcheck.example/api')
     expect(fresh.API_BASE_URL.startsWith('http://')).toBe(false)
   })
 
-  it('usa la ruta relativa /api en producción cuando el host es onrender.com', async () => {
-    const renderWindow = {
-      ...fakeWindow,
-      location: {
-        ...fakeWindow.location,
-        protocol: 'https:',
-        host: 'heartcheck-web.onrender.com',
-      },
-    }
-    ;(globalThis as unknown as { window: typeof renderWindow }).window =
-      renderWindow
-    vi.resetModules()
-    const fresh = await import('./apiClient')
-    expect(fresh.API_BASE_URL).toBe('/api')
-    expect(fresh.API_BASE_URL.includes('http')).toBe(false)
-  })
-
-  it('mantiene HTTP cuando el origen de la app es HTTP', async () => {
+  it('usa el fallback por defecto http://heartcheckapi.runasp.net/api sin variable de entorno', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', undefined)
     vi.resetModules()
     const fresh = await import('./apiClient')
     expect(fresh.API_BASE_URL).toBe('http://heartcheckapi.runasp.net/api')
